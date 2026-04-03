@@ -1,0 +1,311 @@
+---
+title: Frame Processors
+description: Run JavaScript worklets on every Camera frame for real-time image analysis and processing.
+---
+
+## What are frame processors?
+
+Frame Processors are JavaScript functions called synchronously for every frame the Camera captures. Inside a Frame Processor you can analyze frames in real time using native [Frame Processor Plugins](#native-frame-processor-plugins) or draw directly onto them using [Skia Frame Processors](/guides/skia-frame-processors).
+
+For example, the [vision-camera-image-labeler](https://github.com/mrousavy/vision-camera-image-labeler) plugin can detect objects at 60+ FPS:
+
+```tsx
+const frameProcessor = useFrameProcessor((frame) => {
+  'worklet'
+  const objects = detectObjects(frame)
+  const label = objects[0].name
+  console.log(`You're looking at a ${label}.`)
+}, [])
+
+return <Camera frameProcessor={frameProcessor} />
+```
+
+Frame Processors are extensible by design and can be used for:
+
+- **ML** for **face recognition**, object detection, and image labeling
+- Running **TensorFlow / TFLite**, **MLKit Vision**, or **Apple Vision** models
+- Creating **real-time video chats** via **WebRTC** — sending frames directly over the network
+- Scanning custom codes such as **Snapchat SnapCodes** or **Apple App Clips**
+- Building **Snapchat-style filters** — e.g. drawing a dog-mask over a user's face
+- Creating **color filters** with depth detection
+- **Drawing** boxes, text, overlays, or shapes in real time
+- Rendering **shaders** such as Blur, inverted colors, or beauty filters
+
+## Installation
+
+Frame Processors require [react-native-worklets-core](https://github.com/margelo/react-native-worklets-core) 1.0.0 or higher.
+
+<Steps>
+  <Step title="Install react-native-worklets-core">
+    ```bash
+    npm i react-native-worklets-core
+    ```
+  </Step>
+  <Step title="Add the Babel plugin">
+    Add the plugin to your `babel.config.js`:
+
+    ```js
+    module.exports = {
+      plugins: [
+        ['react-native-worklets-core/plugin'],
+      ],
+    }
+    ```
+  </Step>
+  <Step title="Rebuild your app">
+    A full rebuild is required after changing `babel.config.js`.
+  </Step>
+</Steps>
+
+<Note>
+  When `react-native-worklets-core` is not installed, Frame Processors are automatically disabled and no error is thrown.
+</Note>
+
+## The `Frame` object
+
+A Camera Frame is a GPU-based pixel buffer, typically in YUV or RGB format. The `Frame` object wraps that native GPU buffer and exposes its properties directly to JavaScript via [JSI](https://reactnative.dev/docs/the-new-architecture/landing-page#fast-javascriptnative-interfacing).
+
+### Properties
+
+<ParamField path="width" type="number" required>
+  The width of the frame in pixels.
+</ParamField>
+
+<ParamField path="height" type="number" required>
+  The height of the frame in pixels.
+</ParamField>
+
+<ParamField path="pixelFormat" type="'yuv' | 'rgb' | 'unknown'" required>
+  The pixel format of the frame. See [Pixel Formats](/guides/pixel-formats).
+</ParamField>
+
+<ParamField path="bytesPerRow" type="number" required>
+  The number of bytes per row in the pixel buffer.
+</ParamField>
+
+<ParamField path="planesCount" type="number" required>
+  The number of planes the frame contains.
+</ParamField>
+
+<ParamField path="isMirrored" type="boolean" required>
+  Whether the frame is mirrored, as is common with the selfie (front) camera.
+</ParamField>
+
+<ParamField path="timestamp" type="number" required>
+  The timestamp of the frame relative to the host system's clock.
+</ParamField>
+
+<ParamField path="orientation" type="Orientation" required>
+  The orientation of the frame relative to the desired output orientation.
+</ParamField>
+
+<ParamField path="isValid" type="boolean" required>
+  Whether the underlying buffer is still valid. A frame remains valid for the duration of the Frame Processor call (or a `runAsync` operation).
+</ParamField>
+
+### Reading frame properties
+
+```ts
+const frameProcessor = useFrameProcessor((frame) => {
+  'worklet'
+  console.log(`Frame: ${frame.width}x${frame.height} (${frame.pixelFormat})`)
+}, [])
+```
+
+### Accessing pixel data
+
+To read raw pixel bytes, call `frame.toArrayBuffer()`. This copies the data from the GPU to the CPU:
+
+```ts
+const frameProcessor = useFrameProcessor((frame) => {
+  'worklet'
+  if (frame.pixelFormat === 'rgb') {
+    const buffer = frame.toArrayBuffer()
+    const data = new Uint8Array(buffer)
+    console.log(`Pixel at 0,0: RGB(${data[0]}, ${data[1]}, ${data[2]})`)
+  }
+}, [])
+```
+
+<Tip>
+  At 4K resolution, a raw frame is roughly **12 MB** in size. At 60 FPS, that's roughly **700 MB/s** flowing through your Frame Processor. VisionCamera uses [JSI](https://reactnative.dev/docs/the-new-architecture/landing-page#fast-javascriptnative-interfacing) to expose GPU buffers directly to JavaScript — no copying or serialization involved.
+</Tip>
+
+## The `useFrameProcessor` hook
+
+Use the `useFrameProcessor` hook to create a memoized Frame Processor function. Always include the `'worklet'` directive at the top of the function body:
+
+```tsx
+import { useFrameProcessor } from 'react-native-vision-camera'
+
+const frameProcessor = useFrameProcessor((frame) => {
+  'worklet'
+  // your processing code here
+}, [])
+
+return <Camera frameProcessor={frameProcessor} {...props} />
+```
+
+The second argument is a dependency array identical to `useMemo`. Any values used inside the Frame Processor that come from the outer React scope must be listed there.
+
+## Native frame processor plugins
+
+JavaScript alone is not fast enough for heavy image processing — it lacks direct GPU access. Frame Processor Plugins let you call native code (Objective-C/Swift, Java/Kotlin, or C++) synchronously from your Frame Processor worklet via JSI, with essentially no bridging overhead.
+
+```ts
+const sensitivity = 0.8
+
+const frameProcessor = useFrameProcessor((frame) => {
+  'worklet'
+  const faces = detectFaces(frame, { sensitivity: sensitivity })
+  // ...
+}, [sensitivity])
+```
+
+Plugin parameters (e.g. `sensitivity`) can be changed via fast-refresh in development or via over-the-air updates in production — no native rebuild required.
+
+### Using community plugins
+
+Community Frame Processor Plugins are distributed through npm. For example, to install [vision-camera-image-labeler](https://github.com/mrousavy/vision-camera-image-labeler):
+
+```bash
+npm i vision-camera-image-labeler
+cd ios && pod install
+```
+
+Then use it in your Frame Processor:
+
+```ts
+const { labelImage } = useImageLabeler()
+
+const frameProcessor = useFrameProcessor((frame) => {
+  'worklet'
+  const labels = labelImage(frame)
+  const label = labels[0].name
+  console.log(`You're looking at a ${label}.`)
+}, [labelImage])
+```
+
+See [Community Frame Processor Plugins](/guides/frame-processor-plugins-community) for the full list of available plugins.
+
+### Creating a plugin
+
+A Frame Processor Plugin is a native class with an initializer and a `callback` function that receives the native `Frame` object (`CMSampleBuffer` on iOS, `ImageProxy` on Android):
+
+<Tabs>
+  <Tab title="iOS (Swift)">
+    ```swift title="FaceDetectorPlugin.swift"
+    @objc(FaceDetector)
+    public class FaceDetectorPlugin: FrameProcessorPlugin {
+      private let sensitivity: Double
+
+      public override init(proxy: VisionCameraProxyHolder, options: [AnyHashable: Any]) {
+        super.init(proxy: proxy, options: options)
+        sensitivity = options["sensitivity"] as! Double
+      }
+
+      public override func callback(_ frame: Frame, withArguments args: [AnyHashable: Any]?) -> Any {
+        let imageBuffer = CMSampleBufferGetImageBuffer(frame.buffer)
+        let faces = MLKit.detectFaces(imageBuffer, sensitivity)
+        return faces.map { face in face.toJson() }
+      }
+    }
+    ```
+  </Tab>
+  <Tab title="Android (Java)">
+    ```java title="FaceDetectorPlugin.java"
+    public class FaceDetectorPlugin extends FrameProcessorPlugin {
+      private final Double sensitivity;
+
+      public FaceDetectorPlugin(VisionCameraProxy proxy, Map<String, Object> options) {
+        super();
+        sensitivity = (Double) options.get("sensitivity");
+      }
+
+      @Override
+      public Object callback(Frame frame, Map<String, Object> params) {
+        Image image = frame.getImage();
+        List<Face> faces = MLKit.detectFaces(image, sensitivity);
+        return faces.stream().map(f -> f.toJson()).collect(Collectors.toList());
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+The native plugin accepts parameters for configuration and can return any JSON-serializable value. See [Creating Frame Processor Plugins](/guides/frame-processors-plugins-create) for the complete guide.
+
+## Performance
+
+The Frame Processor runtime is written in C++ and bridges to JavaScript with low overhead via [JSI](https://reactnative.dev/docs/the-new-architecture/landing-page#fast-javascriptnative-interfacing).
+
+### Benchmarks
+
+Using [MLKit Vision Image Labeling](https://firebase.google.com/docs/ml-kit/ios/label-images) to label 4K frames in real time:
+
+- **Fully native** (pure Objective-C): average **68ms** per call
+- **As a Frame Processor Plugin** (Objective-C called from a JS Frame Processor): average **69ms** per call
+
+The Frame Processor API adds only ~1ms of overhead compared to a fully native implementation.
+
+### Time budget
+
+Frame Processors run synchronously in the video pipeline. You must finish processing before the next frame arrives:
+
+| Frame rate | Time budget |
+|------------|-------------|
+| 30 FPS     | ~33ms       |
+| 60 FPS     | ~16ms       |
+
+<Tip>
+  The lower the video resolution of your [format](/guides/formats), the faster your Frame Processor executes. If your ML model is trained on 1280×720, use the format closest to that resolution:
+
+  ```ts
+  const format = useCameraFormat(device, [
+    { videoResolution: { width: 1280, height: 720 } }
+  ])
+  ```
+</Tip>
+
+## Disabling frame processors
+
+The Frame Processor API spawns a secondary JavaScript runtime that uses extra CPU and RAM, and increases compile time because Frame Processors are written in native C++. If you are not using Frame Processors, you can disable them:
+
+<Tabs>
+  <Tab title="React Native">
+    **Android**
+
+    Add the `VisionCamera_enableFrameProcessors` flag to your `gradle.properties`:
+
+    ```groovy
+    VisionCamera_enableFrameProcessors=false
+    ```
+
+    Then clean and rebuild your project.
+
+    **iOS**
+
+    Add the `$VCEnableFrameProcessors` flag to your `Podfile`:
+
+    ```ruby
+    $VCEnableFrameProcessors = false
+    ```
+  </Tab>
+  <Tab title="Expo">
+    Inside your Expo config (`app.json`, `app.config.json`, or `app.config.js`), set `enableFrameProcessors` to `false` in the `react-native-vision-camera` plugin:
+
+    ```json
+    {
+      "name": "my app",
+      "plugins": [
+        [
+          "react-native-vision-camera",
+          {
+            "enableFrameProcessors": false
+          }
+        ]
+      ]
+    }
+    ```
+  </Tab>
+</Tabs>

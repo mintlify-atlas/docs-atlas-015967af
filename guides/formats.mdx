@@ -1,0 +1,319 @@
+---
+title: Camera formats
+description: Select a camera format to control video and photo resolution, FPS, HDR, stabilization, and more.
+sidebarTitle: Formats
+keywords: [react-native, vision camera, camera format, fps, hdr, resolution, useCameraFormat, getCameraFormat, templates]
+---
+
+## What are camera formats?
+
+Every `CameraDevice` exposes a list of `CameraDeviceFormat` objects. A format is a fixed stream configuration that determines:
+
+- The **video resolution** used for recording, frame processing, and the preview
+- The **photo resolution** used for still image capture
+- The **FPS range** (`minFps`/`maxFps`) supported in this configuration
+- Whether **HDR** is available for video or photo output
+- Which **video stabilization modes** are supported
+- Whether **depth capture** is available
+
+Formats are designed for specific use-cases. A single device might expose configurations like:
+
+| Photo | Video | Max FPS | Notes |
+|-------|-------|---------|-------|
+| 4k | 4k | 30 | Highest quality |
+| 4k | 1080p | 60 | High frame rate |
+| 4k | 1080p | 240 | Slow motion |
+| 720p | 720p | 30 | Small buffers — faster frame processing |
+
+## Using the default format
+
+The `format` prop on `<Camera>` is optional. When you omit it, VisionCamera selects the best available format automatically. If you do not have specific resolution, FPS, or HDR requirements, you do not need to configure a format at all.
+
+```tsx
+<Camera
+  style={StyleSheet.absoluteFill}
+  device={device}
+  isActive={true}
+  // No `format` prop — VisionCamera picks the best one automatically
+/>
+```
+
+## Selecting a custom format
+
+Use `useCameraFormat` (Hooks API) or `getCameraFormat` (Imperative API) to find the best format for your requirements. Pass an ordered array of `FormatFilter` objects — filters earlier in the array have higher priority.
+
+<Tabs>
+  <Tab title="Hooks API">
+    ```ts
+    import { useCameraDevice, useCameraFormat } from 'react-native-vision-camera'
+
+    const device = useCameraDevice('back')
+    const format = useCameraFormat(device, [
+      { videoAspectRatio: 16 / 9 },
+      { videoResolution: { width: 3840, height: 2160 } },
+      { fps: 60 },
+    ])
+    ```
+  </Tab>
+  <Tab title="Imperative API">
+    ```ts
+    import { Camera, getCameraFormat } from 'react-native-vision-camera'
+
+    const devices = Camera.getAvailableCameraDevices()
+    const device = getCameraDevice(devices, 'back')
+    const format = getCameraFormat(device, [
+      { videoAspectRatio: 16 / 9 },
+      { videoResolution: { width: 3840, height: 2160 } },
+      { fps: 60 },
+    ])
+    ```
+  </Tab>
+</Tabs>
+
+Because `videoResolution` is listed first, the format function prioritizes resolution over FPS. If no format supports both 4k and 60 FPS, you get 4k@30 FPS rather than 1080p@60 FPS.
+
+### Targeting maximum resolution
+
+Pass `'max'` to get the highest available resolution without specifying exact dimensions:
+
+<Tabs>
+  <Tab title="Hooks API">
+    ```ts
+    const format = useCameraFormat(device, [
+      { videoResolution: 'max' },
+      { photoResolution: 'max' },
+    ])
+    ```
+  </Tab>
+  <Tab title="Imperative API">
+    ```ts
+    const format = getCameraFormat(device, [
+      { videoResolution: 'max' },
+      { photoResolution: 'max' },
+    ])
+    ```
+  </Tab>
+</Tabs>
+
+### Targeting slow motion
+
+For slow-motion recording, request the highest FPS available:
+
+<Tabs>
+  <Tab title="Hooks API">
+    ```ts
+    const format = useCameraFormat(device, [
+      { fps: 240 },
+    ])
+    ```
+  </Tab>
+  <Tab title="Imperative API">
+    ```ts
+    const format = getCameraFormat(device, [
+      { fps: 240 },
+    ])
+    ```
+  </Tab>
+</Tabs>
+
+If no format supports exactly 240 FPS, the closest available value is used.
+
+## Format templates
+
+VisionCamera ships with predefined `FormatFilter[]` arrays for common use-cases. Import them from the `Templates` export and pass them directly to `useCameraFormat` or `getCameraFormat`:
+
+<Tabs>
+  <Tab title="Hooks API">
+    ```ts
+    import { useCameraFormat, Templates } from 'react-native-vision-camera'
+
+    const format = useCameraFormat(device, Templates.Snapchat)
+    ```
+  </Tab>
+  <Tab title="Imperative API">
+    ```ts
+    import { getCameraFormat, Templates } from 'react-native-vision-camera'
+
+    const format = getCameraFormat(device, Templates.Snapchat)
+    ```
+  </Tab>
+</Tabs>
+
+The available templates are:
+
+| Template | Description | Filters |
+|----------|-------------|---------|
+| `Templates.Video` | Highest resolution video (e.g. 4k) | `videoResolution: 'max'` |
+| `Templates.Video60Fps` | High resolution 60 FPS video (e.g. 1080p@60) | `fps: 60`, then `videoResolution: 'max'` |
+| `Templates.VideoSlowMotion` | High-FPS slow motion (e.g. 720p@240) | `fps: 240`, then `videoResolution: 'max'` |
+| `Templates.VideoStabilized` | High resolution with cinematic-extended stabilization | `videoResolution: 'max'`, then `videoStabilizationMode: 'cinematic-extended'` |
+| `Templates.Photo` | Highest resolution photo capture | `photoResolution: 'max'` |
+| `Templates.PhotoPortrait` | Highest resolution photo in portrait screen aspect ratio | `photoResolution: 'max'`, then `photoAspectRatio: screenAspectRatio` |
+| `Templates.FrameProcessing` | HD quality for faster frame processing (720p) | `videoResolution: { width: 1080, height: 720 }` |
+| `Templates.Snapchat` | 1080p video + photo in portrait screen aspect ratio | aspect ratio, then 1920×1080 resolution |
+| `Templates.Instagram` | 4k video + photo in portrait screen aspect ratio | aspect ratio, then 3840×2160 resolution |
+
+## Format props on Camera
+
+Once you have a format, pass it to the `<Camera>` component along with any format-dependent props:
+
+```tsx
+function App() {
+  const device = useCameraDevice('back')
+  const format = useCameraFormat(device, Templates.Video60Fps)
+
+  return (
+    <Camera
+      style={StyleSheet.absoluteFill}
+      device={device}
+      format={format}
+      isActive={true}
+      fps={60}
+      videoHdr={format?.supportsVideoHdr}
+      videoStabilizationMode="cinematic"
+    />
+  )
+}
+```
+
+### FPS
+
+Use the `fps` prop to set the target frame rate. The value must fall within `[format.minFps, format.maxFps]`.
+
+**Fixed FPS** — the camera always runs at exactly this rate:
+
+```tsx
+const fps = format.maxFps // e.g. 60
+
+<Camera {...props} format={format} fps={fps} />
+```
+
+**Variable FPS** — pass a `[min, max]` tuple to allow the camera to throttle down under low light conditions, producing better-exposed frames at the cost of a lower frame rate:
+
+```tsx
+const minFps = Math.max(format.minFps, 20) // floor at 20 FPS
+const maxFps = Math.min(format.maxFps, 30) // cap at 30 FPS
+
+<Camera {...props} format={format} fps={[minFps, maxFps]} />
+```
+
+<Tip>
+  Variable FPS is useful for night-time or indoor capture — the camera automatically slows down to gather more light when needed.
+</Tip>
+
+### HDR
+
+- `videoHdr` — enables true 10-bit HDR video capture and preview. Requires `format.supportsVideoHdr === true`.
+- `photoHdr` — enables multi-frame HDR photo capture. Requires `format.supportsPhotoHdr === true`.
+
+```tsx
+<Camera
+  {...props}
+  format={format}
+  videoHdr={format?.supportsVideoHdr ?? false}
+  photoHdr={format?.supportsPhotoHdr ?? false}
+/>
+```
+
+### Video stabilization
+
+```tsx
+<Camera
+  {...props}
+  format={format}
+  videoStabilizationMode="cinematic"
+/>
+```
+
+The `videoStabilizationMode` must be present in `format.videoStabilizationModes`. Available modes (from `VideoStabilizationMode`):
+
+- `"off"` — no stabilization
+- `"standard"` — software stabilization with ~10% field-of-view crop
+- `"cinematic"` — more aggressive software stabilization
+- `"cinematic-extended"` — combined software and hardware stabilization
+- `"auto"` — platform chooses the best available mode
+
+## CameraDeviceFormat properties
+
+<ParamField path="videoWidth" type="number" required>
+  Width of the video output in pixels (landscape orientation).
+</ParamField>
+
+<ParamField path="videoHeight" type="number" required>
+  Height of the video output in pixels (landscape orientation).
+</ParamField>
+
+<ParamField path="photoWidth" type="number" required>
+  Width of the photo output in pixels.
+</ParamField>
+
+<ParamField path="photoHeight" type="number" required>
+  Height of the photo output in pixels.
+</ParamField>
+
+<ParamField path="minFps" type="number" required>
+  The minimum frame rate this format can run at. High-resolution formats often have a higher minimum.
+</ParamField>
+
+<ParamField path="maxFps" type="number" required>
+  The maximum frame rate this format can run at.
+</ParamField>
+
+<ParamField path="supportsVideoHdr" type="boolean" required>
+  Whether this format supports true 10-bit HDR for video capture. When `true`, you can enable `videoHdr` on `<Camera>`.
+</ParamField>
+
+<ParamField path="supportsPhotoHdr" type="boolean" required>
+  Whether this format supports multi-frame HDR for photo capture. When `true`, you can enable `photoHdr` on `<Camera>`.
+</ParamField>
+
+<ParamField path="supportsDepthCapture" type="boolean" required>
+  Whether this format supports depth data capture. Always `true` on TrueDepth and LiDAR cameras.
+</ParamField>
+
+<ParamField path="videoStabilizationModes" type="VideoStabilizationMode[]" required>
+  All video stabilization modes supported by this format.
+</ParamField>
+
+<ParamField path="autoFocusSystem" type="AutoFocusSystem" required>
+  The autofocus system used by this format: `'phase-detection'`, `'contrast-detection'`, or `'none'`.
+</ParamField>
+
+<ParamField path="fieldOfView" type="number" required>
+  The video field of view in degrees.
+</ParamField>
+
+<ParamField path="maxISO" type="number" required>
+  Maximum supported ISO value.
+</ParamField>
+
+<ParamField path="minISO" type="number" required>
+  Minimum supported ISO value.
+</ParamField>
+
+## TypeScript signatures
+
+```ts
+export interface FormatFilter {
+  videoResolution?: { width: number; height: number } | 'max'
+  photoResolution?: { width: number; height: number } | 'max'
+  videoAspectRatio?: number
+  photoAspectRatio?: number
+  fps?: number | 'max'
+  videoStabilizationMode?: VideoStabilizationMode
+  photoHdr?: boolean
+  videoHdr?: boolean
+  iso?: number | 'max' | 'min'
+  autoFocusSystem?: AutoFocusSystem
+}
+
+export function useCameraFormat(
+  device: CameraDevice | undefined,
+  filters: FormatFilter[]
+): CameraDeviceFormat | undefined
+
+export function getCameraFormat(
+  device: CameraDevice,
+  filters: FormatFilter[]
+): CameraDeviceFormat
+```

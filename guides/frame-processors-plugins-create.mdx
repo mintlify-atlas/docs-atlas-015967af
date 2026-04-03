@@ -1,0 +1,584 @@
+---
+title: Creating Frame Processor Plugins
+description: Build native Frame Processor Plugins in Swift, Kotlin, Java, or C++ that can be called synchronously from JavaScript worklets.
+---
+
+## Overview
+
+Frame Processor Plugins are **native functions** called synchronously from a JavaScript Frame Processor via JSI. They receive a Camera frame as input and can return any value that maps to a JavaScript type.
+
+For example, a `detectFaces` plugin receives a frame and returns an array of detected faces:
+
+```tsx
+function App() {
+  const frameProcessor = useFrameProcessor((frame) => {
+    'worklet'
+    const faces = detectFaces(frame)
+    console.log(`Faces in frame: ${faces.length}`)
+  }, [])
+
+  return <Camera frameProcessor={frameProcessor} {...cameraProps} />
+}
+```
+
+Because `detectFaces` is a native function written in Objective-C, Swift, Java, or Kotlin, it has direct access to GPU-accelerated APIs and can process frames far faster than JavaScript alone.
+
+## Type conversion
+
+The Frame Processor Plugin registry automatically converts values between JavaScript and native types:
+
+| JavaScript type      | Objective-C / Swift type      | Java / Kotlin type           |
+|----------------------|-------------------------------|------------------------------|
+| `number`             | `NSNumber*` (double)          | `Double`                     |
+| `boolean`            | `NSNumber*` (boolean)         | `Boolean`                    |
+| `string`             | `NSString*`                   | `String`                     |
+| `[]`                 | `NSArray*`                    | `List<Object>`               |
+| `{}`                 | `NSDictionary*`               | `Map<String, Object>`        |
+| `undefined` / `null` | `nil`                         | `null`                       |
+| `(any, any) => void` | `RCTResponseSenderBlock`      | `(Object, Object) -> void`   |
+| `ArrayBuffer`        | `SharedArray*`                | `SharedArray`                |
+| `Frame`              | `Frame*`                      | `Frame`                      |
+
+Return values are converted back to JavaScript using the same table.
+
+## Creating a plugin
+
+<Tabs>
+  <Tab title="iOS (Swift)">
+    ### Automatic setup
+
+    Run the [Vision Camera Plugin Builder CLI](https://github.com/mateusz1913/vision-camera-plugin-builder):
+
+    ```bash
+    npx vision-camera-plugin-builder@latest ios
+    ```
+
+    The CLI asks for your `.xcodeproj` path, the plugin class name (e.g. `FaceDetectorFrameProcessorPlugin`), the exposed method name (e.g. `detectFaces`), and the language (Swift, Objective-C, or Objective-C++).
+
+    ### Manual setup
+
+    <Steps>
+      <Step title="Open your project in Xcode">
+        Create a new Swift file named `FaceDetectorFrameProcessorPlugin.swift`. If Xcode prompts you to create a Bridging Header, choose **Create**.
+      </Step>
+      <Step title="Implement the plugin">
+        ```swift
+        import VisionCamera
+
+        @objc(FaceDetectorFrameProcessorPlugin)
+        public class FaceDetectorFrameProcessorPlugin: FrameProcessorPlugin {
+          public override init(proxy: VisionCameraProxyHolder, options: [AnyHashable: Any]! = [:]) {
+            super.init(proxy: proxy, options: options)
+          }
+
+          public override func callback(_ frame: Frame, withArguments arguments: [AnyHashable: Any]?) -> Any {
+            let buffer = frame.buffer
+            let orientation = frame.orientation
+            // Add your frame processing here
+            return nil
+          }
+        }
+        ```
+      </Step>
+      <Step title="Register the plugin">
+        Create an Objective-C file to register the Swift plugin:
+
+        ```objc
+        #import <VisionCamera/FrameProcessorPlugin.h>
+        #import <VisionCamera/FrameProcessorPluginRegistry.h>
+        #import "YOUR_XCODE_PROJECT_NAME-Swift.h"
+
+        VISION_EXPORT_SWIFT_FRAME_PROCESSOR(FaceDetectorFrameProcessorPlugin, detectFaces)
+        ```
+
+        Replace `YOUR_XCODE_PROJECT_NAME` with your actual Xcode project name.
+      </Step>
+    </Steps>
+  </Tab>
+  <Tab title="Android (Kotlin)">
+    ### Automatic setup
+
+    Run the [Vision Camera Plugin Builder CLI](https://github.com/mateusz1913/vision-camera-plugin-builder):
+
+    ```bash
+    npx vision-camera-plugin-builder@latest android
+    ```
+
+    The CLI asks for the path to your `AndroidManifest.xml`, the plugin class name, the exposed method name, and the language (Java or Kotlin).
+
+    ### Manual setup
+
+    <Steps>
+      <Step title="Create the plugin class">
+        Create `FaceDetectorFrameProcessorPlugin.kt`:
+
+        ```kotlin
+        import com.mrousavy.camera.frameprocessors.Frame
+        import com.mrousavy.camera.frameprocessors.FrameProcessorPlugin
+        import com.mrousavy.camera.frameprocessors.VisionCameraProxy
+
+        class FaceDetectorFrameProcessorPlugin(
+          proxy: VisionCameraProxy,
+          options: Map<String, Any>?,
+        ) : FrameProcessorPlugin() {
+
+          override fun callback(frame: Frame, arguments: Map<String, Any>?): Any? {
+            // Add your frame processing here
+            return null
+          }
+        }
+        ```
+      </Step>
+      <Step title="Create a React Package to register the plugin">
+        Create `FaceDetectorFrameProcessorPluginPackage.kt`:
+
+        ```kotlin
+        import com.facebook.react.ReactPackage
+        import com.facebook.react.bridge.NativeModule
+        import com.facebook.react.bridge.ReactApplicationContext
+        import com.facebook.react.uimanager.ViewManager
+        import com.mrousavy.camera.frameprocessors.FrameProcessorPluginRegistry
+
+        class FaceDetectorFrameProcessorPluginPackage : ReactPackage {
+          companion object {
+            init {
+              FrameProcessorPluginRegistry.addFrameProcessorPlugin("detectFaces") { proxy, options ->
+                FaceDetectorFrameProcessorPlugin(proxy, options)
+              }
+            }
+          }
+
+          override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> =
+            emptyList()
+
+          override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> =
+            emptyList()
+        }
+        ```
+      </Step>
+      <Step title="Register the package in MainApplication">
+        ```java
+        @Override
+        protected List<ReactPackage> getPackages() {
+          List<ReactPackage> packages = new PackageList(this).getPackages();
+          packages.add(new FaceDetectorFrameProcessorPluginPackage()); // add this
+          return packages;
+        }
+        ```
+      </Step>
+    </Steps>
+  </Tab>
+  <Tab title="Android (Java)">
+    <Steps>
+      <Step title="Create the plugin class">
+        Create `FaceDetectorFrameProcessorPlugin.java`:
+
+        ```java
+        import androidx.annotation.NonNull;
+        import androidx.annotation.Nullable;
+        import com.mrousavy.camera.frameprocessors.Frame;
+        import com.mrousavy.camera.frameprocessors.FrameProcessorPlugin;
+        import com.mrousavy.camera.frameprocessors.VisionCameraProxy;
+        import java.util.Map;
+
+        public class FaceDetectorFrameProcessorPlugin extends FrameProcessorPlugin {
+          FaceDetectorFrameProcessorPlugin(
+            @NonNull VisionCameraProxy proxy,
+            @Nullable Map<String, Object> options,
+          ) {}
+
+          @Nullable
+          @Override
+          public Object callback(
+            @NonNull Frame frame,
+            @Nullable Map<String, Object> arguments,
+          ) throws Throwable {
+            // Add your frame processing here
+            return null;
+          }
+        }
+        ```
+      </Step>
+      <Step title="Create a React Package to register the plugin">
+        Create `FaceDetectorFrameProcessorPluginPackage.java`:
+
+        ```java
+        import com.facebook.react.ReactPackage;
+        import com.facebook.react.bridge.NativeModule;
+        import com.facebook.react.bridge.ReactApplicationContext;
+        import com.facebook.react.uimanager.ViewManager;
+        import com.mrousavy.camera.frameprocessors.FrameProcessorPluginRegistry;
+        import java.util.Collections;
+        import java.util.List;
+
+        public class FaceDetectorFrameProcessorPluginPackage implements ReactPackage {
+          static {
+            FrameProcessorPluginRegistry.addFrameProcessorPlugin(
+              "detectFaces",
+              FaceDetectorFrameProcessorPlugin::new,
+            );
+          }
+
+          @NonNull
+          @Override
+          public List<NativeModule> createNativeModules(
+            @NonNull ReactApplicationContext reactContext,
+          ) {
+            return Collections.emptyList();
+          }
+
+          @NonNull
+          @Override
+          public List<ViewManager> createViewManagers(
+            @NonNull ReactApplicationContext reactContext,
+          ) {
+            return Collections.emptyList();
+          }
+        }
+        ```
+      </Step>
+      <Step title="Register the package in MainApplication">
+        ```java
+        @Override
+        protected List<ReactPackage> getPackages() {
+          List<ReactPackage> packages = new PackageList(this).getPackages();
+          packages.add(new FaceDetectorFrameProcessorPluginPackage()); // add this
+          return packages;
+        }
+        ```
+      </Step>
+    </Steps>
+  </Tab>
+  <Tab title="C++ (JSI)">
+    C++ Frame Processor Plugins are built directly on JSI. They are called as native JSI functions and can be shared across contexts. Benefits include lower marshalling overhead and shared cross-platform code (e.g. an OpenCV plugin only needs to be implemented once).
+
+    <Steps>
+      <Step title="Write the C++ function">
+        ```cpp
+        #include "frameprocessors/FrameHostObject.h"
+
+        auto myPlugin = [=](
+          jsi::Runtime& runtime,
+          const jsi::Value& thisArg,
+          const jsi::Value* args,
+          size_t count,
+        ) -> jsi::Value {
+          auto frame = args[0]
+            .asObject(runtime)
+            .asHostObject<FrameHostObject>(runtime);
+          // Process the frame here using any C++ library
+          return jsi::Value(42);
+        };
+        ```
+      </Step>
+      <Step title="Register the function as a JSI global">
+        ```cpp
+        auto jsiFunc = jsi::Function::createFromHostFunction(
+          runtime,
+          jsi::PropNameID::forUtf8(runtime, "myCppPlugin"),
+          1,
+          myPlugin,
+        );
+        runtime.global().setProperty(runtime, "myCppPlugin", jsiFunc);
+        ```
+      </Step>
+      <Step title="Call it from JavaScript">
+        ```ts
+        const frameProcessor = useFrameProcessor((frame) => {
+          'worklet'
+          const result = global.myCppPlugin(frame)
+          console.log(`C++ result: ${result}`) // 42
+        }, [])
+        ```
+      </Step>
+      <Step title="Link VisionCamera in your native build system">
+        <Tabs>
+          <Tab title="iOS (CocoaPods)">
+            Add to your `.podspec`:
+
+            ```ruby
+            s.dependency "VisionCamera"
+            ```
+
+            Then include the header:
+
+            ```cpp
+            #include "FrameProcessors/FrameHostObject.h"
+            ```
+          </Tab>
+          <Tab title="Android (CMake)">
+            Add to your `CMakeLists.txt`:
+
+            ```cmake
+            find_package(react-native-vision-camera REQUIRED CONFIG)
+
+            target_link_libraries(
+              ${PACKAGE_NAME}
+              react-native-vision-camera::VisionCamera
+            )
+            ```
+
+            Then include the header:
+
+            ```cpp
+            #include "frame-processor/FrameHostObject.h"
+            ```
+          </Tab>
+        </Tabs>
+      </Step>
+    </Steps>
+  </Tab>
+  <Tab title="Expo Modules">
+    <Note>
+      This guide applies to **Expo projects using Continuous Native Generation (CNG)**. For bare React Native projects, use the [iOS](#ios-swift) or [Android](#android-kotlin) tabs instead.
+    </Note>
+
+    <Steps>
+      <Step title="Create a local Expo Module">
+        ```bash
+        npx create-expo-module@latest --local face-detector-frame-processor
+        ```
+      </Step>
+      <Step title="Configure iOS — add VisionCamera to the Podspec">
+        Edit `ios/FaceDetectorFrameProcessor.podspec`:
+
+        ```ruby
+        Pod::Spec.new do |s|
+          # ... standard setup ...
+          s.dependency "ExpoModulesCore"
+          s.dependency "VisionCamera"
+        end
+        ```
+      </Step>
+      <Step title="Implement the iOS Frame Processor">
+        Create `ios/FaceDetectorFrameProcessor.m`:
+
+        ```objc
+        #import <VisionCamera/FrameProcessorPlugin.h>
+        #import <VisionCamera/FrameProcessorPluginRegistry.h>
+        #import <VisionCamera/VisionCameraProxyHolder.h>
+        #import <VisionCamera/Frame.h>
+
+        @interface FaceDetectorFrameProcessorPlugin : FrameProcessorPlugin
+        @end
+
+        @implementation FaceDetectorFrameProcessorPlugin
+
+        - (instancetype _Nonnull)initWithProxy:(VisionCameraProxyHolder*)proxy
+                                   withOptions:(NSDictionary* _Nullable)options {
+          self = [super initWithProxy:proxy withOptions:options];
+          return self;
+        }
+
+        - (id _Nullable)callback:(Frame* _Nonnull)frame
+                    withArguments:(NSDictionary* _Nullable)arguments {
+          // Add your frame processing here
+          return nil;
+        }
+
+        VISION_EXPORT_FRAME_PROCESSOR(FaceDetectorFrameProcessorPlugin, detectFaces)
+
+        @end
+        ```
+      </Step>
+      <Step title="Configure Android — add VisionCamera to Gradle">
+        Edit `android/build.gradle`:
+
+        ```groovy
+        dependencies {
+          implementation project(':react-native-vision-camera')
+        }
+        ```
+      </Step>
+      <Step title="Implement the Android Frame Processor">
+        Create `FaceDetectorFrameProcessorPlugin.java`:
+
+        ```java
+        package expo.modules.facedetectorframeprocessor;
+
+        import com.mrousavy.camera.frameprocessors.Frame;
+        import com.mrousavy.camera.frameprocessors.FrameProcessorPlugin;
+        import com.mrousavy.camera.frameprocessors.VisionCameraProxy;
+        import java.util.Map;
+
+        public class FaceDetectorFrameProcessorPlugin extends FrameProcessorPlugin {
+          public FaceDetectorFrameProcessorPlugin(
+            VisionCameraProxy proxy,
+            Map<String, Object> options,
+          ) {
+            super();
+          }
+
+          @Override
+          public Object callback(Frame frame, Map<String, Object> arguments) {
+            // Add your frame processing here
+            return null;
+          }
+        }
+        ```
+      </Step>
+      <Step title="Register the plugin via an Expo Module">
+        Create `FaceDetectorFrameProcessorModule.kt`:
+
+        ```kotlin
+        package expo.modules.facedetectorframeprocessor
+
+        import expo.modules.kotlin.modules.Module
+        import expo.modules.kotlin.modules.ModuleDefinition
+        import com.mrousavy.camera.frameprocessors.FrameProcessorPluginRegistry
+        import com.mrousavy.camera.frameprocessors.VisionCameraProxy
+
+        class FaceDetectorFrameProcessorModule : Module() {
+          init {
+            FrameProcessorPluginRegistry.addFrameProcessorPlugin("detectFaces") { proxy, options ->
+              FaceDetectorFrameProcessorPlugin(proxy, options)
+            }
+          }
+
+          override fun definition() = ModuleDefinition {
+            Name("FaceDetectorFrameProcessor")
+          }
+        }
+        ```
+      </Step>
+      <Step title="Configure autolinking">
+        Update `expo-module.config.json`:
+
+        ```json
+        {
+          "platforms": ["apple", "android"],
+          "apple": {
+            "modules": ["FaceDetectorFrameProcessorModule"]
+          },
+          "android": {
+            "modules": [
+              "expo.modules.facedetectorframeprocessor.FaceDetectorFrameProcessorModule"
+            ]
+          }
+        }
+        ```
+      </Step>
+    </Steps>
+  </Tab>
+</Tabs>
+
+## Exposing the plugin to JavaScript
+
+After implementing the native plugin, create a TypeScript wrapper that initializes the plugin and exposes it as a worklet function:
+
+```ts
+import { VisionCameraProxy, Frame } from 'react-native-vision-camera'
+
+const plugin = VisionCameraProxy.initFrameProcessorPlugin('detectFaces')
+
+/**
+ * Detects faces in the given frame.
+ */
+export function detectFaces(frame: Frame): object[] {
+  'worklet'
+  if (plugin == null) {
+    throw new Error('Failed to load Frame Processor Plugin "detectFaces"!')
+  }
+  return plugin.call(frame) as object[]
+}
+```
+
+## Parameters and return values
+
+Plugins can accept additional parameters as an options object. Parameters follow the same type conversion table as return values:
+
+```ts
+const frameProcessor = useFrameProcessor((frame) => {
+  'worklet'
+  const faces = scanFaces(frame, { accuracy: 'fast', maxFaces: 3 })
+}, [])
+```
+
+On the native side (Kotlin example):
+
+```kotlin
+override fun callback(frame: Frame, arguments: Map<String, Any>?): Any? {
+  val accuracy = arguments?.get("accuracy") as? String ?: "default"
+  val maxFaces = (arguments?.get("maxFaces") as? Double)?.toInt() ?: 10
+  // use accuracy and maxFaces
+  return null
+}
+```
+
+## Exceptions
+
+Throw an exception from native code to propagate an error to JavaScript:
+
+```java
+@Override
+public Object callback(Frame frame, Map<String, Object> arguments) throws Throwable {
+  if (arguments == null || !(arguments.get("codeType") instanceof String)) {
+    throw new RuntimeException("codeType must be a string!");
+  }
+  // ...
+  return null;
+}
+```
+
+The exception surfaces in JavaScript:
+
+```ts
+const frameProcessor = useFrameProcessor((frame) => {
+  'worklet'
+  try {
+    const codes = scanCodes(frame, { codeType: 1234 })
+  } catch (e) {
+    console.log(`Error: ${e.message}`)
+  }
+}, [])
+```
+
+## Long-running plugins
+
+If your plugin takes longer than one frame interval to execute, copy the frame and dispatch the actual processing to a background thread. For example, a WebRTC upload plugin:
+
+```java
+@Override
+public Object callback(Frame frame, Map<String, Object> arguments) throws Throwable {
+  String serverURL = (String) arguments.get("serverURL");
+  Frame frameCopy = new Frame(/* ... */);
+
+  uploaderQueue.runAsync(() -> {
+    WebRTC.uploadImage(frameCopy, serverURL);
+    frameCopy.close();
+  });
+
+  return null;
+}
+```
+
+## Distributing your plugin
+
+To publish your Frame Processor Plugin on npm:
+
+<Steps>
+  <Step title="Create a blank native module">
+    Use [react-native-builder-bob](https://github.com/callstack/react-native-builder-bob) or [create-react-native-module](https://github.com/brodybits/create-react-native-module) to scaffold the package.
+  </Step>
+  <Step title="Name it appropriately">
+    Follow the convention `vision-camera-plugin-xxxxx` where `xxxxx` describes your plugin.
+  </Step>
+  <Step title="Add VisionCamera as a peer dependency">
+    ```json
+    {
+      "peerDependencies": {
+        "react-native-vision-camera": ">= 3"
+      }
+    }
+    ```
+  </Step>
+  <Step title="Implement the plugin">
+    Follow the iOS, Android, and TypeScript wrapper guides above.
+  </Step>
+  <Step title="Publish to npm">
+    Users only need to run `npm i vision-camera-plugin-xxxxx` and add it to their `babel.config.js`.
+  </Step>
+  <Step title="Add it to the community list">
+    Open a pull request to [add your plugin](https://github.com/mrousavy/react-native-vision-camera/edit/main/docs/docs/guides/FRAME_PROCESSOR_PLUGINS_COMMUNITY.mdx) to the official VisionCamera plugin list.
+  </Step>
+</Steps>

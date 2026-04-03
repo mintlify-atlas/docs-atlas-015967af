@@ -1,0 +1,252 @@
+---
+title: "Troubleshooting"
+description: "Solutions to common VisionCamera build errors, runtime issues, and configuration problems on iOS and Android."
+---
+
+If you're experiencing unexpected behavior with VisionCamera, work through the relevant sections below before opening an issue. Most problems fall into a small set of known categories.
+
+<Note>
+  Always try to reproduce the issue in the [VisionCamera example app](https://github.com/mrousavy/react-native-vision-camera/tree/main/example) first. If the example works but your app does not, the issue is likely in your project configuration.
+</Note>
+
+## Platform requirements
+
+| Platform | Minimum version |
+|---|---|
+| iOS | 12.4 |
+| Android API | 21 |
+| Swift | 5.2 |
+| Android target SDK | 33 |
+| Android compile SDK | 33 |
+| Android NDK | 23.1.7779620 |
+| Android Gradle plugin | 7.3.1 |
+| Gradle wrapper | 7.5.1 |
+
+## Common issues
+
+<AccordionGroup>
+
+  <Accordion title="Camera shows a black screen">
+    A black screen usually means the camera session started but cannot render a preview. Try the following:
+
+    1. Strip the `<Camera>` component down to the minimum required props and check if it works:
+
+    ```tsx
+    <Camera
+      device={device}
+      isActive={true}
+      style={{ width: 500, height: 500 }}
+    />
+    ```
+
+    2. Remove optional props like `fps`, `videoHdr`, `pixelFormat`, and `format` one at a time to identify which combination is causing the issue.
+
+    3. Inspect the available camera devices and verify you are using a valid one:
+
+    ```tsx
+    const devices = Camera.getAvailableCameraDevices()
+    console.log(JSON.stringify(devices, null, 2))
+    ```
+
+    Look for the `id` and `hardwareLevel` properties to confirm the device is usable.
+
+    4. On iOS, check Xcode logs (**View > Debug Area > Activate Console**). On Android, check Logcat in Android Studio or run `adb logcat`.
+  </Accordion>
+
+  <Accordion title='"No camera device found"'>
+    This error means `useCameraDevice` or `Camera.getAvailableCameraDevices()` returned nothing for the requested position.
+
+    - **Simulator / Emulator**: Camera hardware is not available. Test on a physical device. On iOS, you will see the `device/camera-not-available-on-simulator` error code.
+    - **Android**: Make sure the device supports Camera2. See [the Android Camera2 docs](https://developer.android.com/reference/android/hardware/camera2/CameraDevice) for compatibility requirements.
+    - **Permissions not granted**: The device list may be empty if camera permission was denied. Call `useCameraPermission` and request permission before accessing devices.
+    - **Wrong position**: If you request `'front'` but the device has no front camera, the result will be `undefined`. Always guard against null:
+
+    ```tsx
+    const device = useCameraDevice('back')
+
+    if (device == null) {
+      return <Text>No back camera found.</Text>
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Permissions not working">
+    **iOS**
+
+    - Add `NSCameraUsageDescription` to your `Info.plist`. Without it, the permission dialog will not appear and the app may crash.
+    - Add `NSMicrophoneUsageDescription` if you use `audio={true}`.
+    - Call `Camera.requestCameraPermission()` or use `useCameraPermission()` before mounting `<Camera>`.
+
+    **Android**
+
+    - Add `<uses-permission android:name="android.permission.CAMERA" />` to your `AndroidManifest.xml`.
+    - Add `<uses-permission android:name="android.permission.RECORD_AUDIO" />` if you use `audio={true}`.
+    - On Android 6+, runtime permissions are required. Use `useCameraPermission()` to request them.
+
+    If `getCameraPermissionStatus()` returns `'denied'` after the user previously dismissed the dialog, you must direct them to your app's system settings — the permission dialog will not appear again.
+  </Accordion>
+
+  <Accordion title="iOS build fails after pod install">
+    1. Build from Xcode instead of the command line. The error panel gives more detail than terminal output.
+
+    2. Clean and reinstall everything:
+
+    ```bash
+    rm -rf node_modules package-lock.json yarn.lock
+    rm -rf ios/Podfile.lock ios/Pods
+    npm install
+    cd ios && pod repo update && pod update && pod install
+    ```
+
+    3. Check your minimum iOS version. Open your `Podfile` and ensure `platform :ios` is set to `'12.4'` or higher. Also verify `IPHONEOS_DEPLOYMENT_TARGET` in `project.pbxproj`.
+
+    4. Check your Swift version. Open `project.pbxproj` and ensure `SWIFT_VERSION` is `5.2` or higher. If `LIBRARY_SEARCH_PATH` contains an explicit reference to `Swift-5.0`, remove it (see [this StackOverflow answer](https://stackoverflow.com/a/66281846/1123156)).
+
+    5. Create a Swift bridging header if you don't have one:
+       - Open your `.xcworkspace` in Xcode
+       - Press **File > New > File** (`⌘N`)
+       - Select **Swift File**, press **Next**, name it (e.g. `Bridging.swift`), press **Create**
+       - Press **Create Bridging Header** when prompted
+
+    6. If the build still fails, try disabling Frame Processors. Add this to the top of your `Podfile`:
+
+    ```ruby
+    $VCEnableFrameProcessors = false
+    ```
+  </Accordion>
+
+  <Accordion title="Android build fails">
+    1. Build from Android Studio instead of the command line. Scroll up in the **Build** output — `BUILD FAILED` appears at the end, but the actual error is higher up.
+
+    2. Clean and reinstall everything:
+
+    ```bash
+    ./android/gradlew clean
+    rm -rf android/.gradle android/.idea android/app/build android/build
+    rm -rf node_modules package-lock.json
+    npm install
+    ```
+
+    3. Check your `build.gradle` settings. VisionCamera requires:
+
+    ```groovy
+    buildToolsVersion = "33.0.0"
+    minSdkVersion = 21
+    compileSdkVersion = 33
+    targetSdkVersion = 33
+    ndkVersion = "23.1.7779620"
+
+    // In dependencies:
+    classpath("com.android.tools.build:gradle:7.3.1")
+    ```
+
+    4. Check your Gradle wrapper version. In `gradle/wrapper/gradle-wrapper.properties`:
+
+    ```properties
+    distributionUrl=https\://services.gradle.org/distributions/gradle-7.5.1-all.zip
+    ```
+
+    5. Make sure the [Android NDK](https://developer.android.com/ndk) is installed via Android Studio's SDK Manager.
+
+    6. If the build still fails, try disabling Frame Processors. In `gradle.properties`:
+
+    ```properties
+    VisionCamera_enableFrameProcessors=false
+    ```
+  </Accordion>
+
+  <Accordion title="Frame Processors are not running">
+    Frame Processors require the Worklet runtime (provided by `react-native-worklets-core`).
+
+    - Make sure `react-native-worklets-core` is installed and linked correctly.
+    - Do not use a remote JS debugger (e.g. Chrome DevTools). Remote debugging replaces the JSI runtime with a message-based bridge, which is incompatible with Worklets. Use Flipper or Hermes debugging instead.
+    - On iOS, check the Xcode console for messages from the Frame Processor Runtime — it logs useful diagnostics on startup.
+    - On Android, check Logcat for VisionCamera JSI binding messages:
+
+    ```
+    VisionCamera: Loading native C++ library...
+    VisionCamera: Installing JSI bindings...
+    VisionCamera: Finished installing JSI bindings!
+    ```
+
+    If you see an error after "Loading native C++ library...", the Frame Processor runtime failed to initialize.
+
+    - If Frame Processors are confirmed unavailable, you will receive a `system/frame-processors-unavailable` error. See the [errors guide](/guides/errors) for handling this code.
+  </Accordion>
+
+  <Accordion title="Camera is slow or laggy">
+    - Lower the frame rate by setting a `format` with a lower `maxFps`, or pass `fps={30}` explicitly.
+    - Disable Frame Processors if you don't need them — simply omit the `frameProcessor` prop, or disable them at build time (see the [Frame Processors guide](/guides/frame-processors#disabling-frame-processors)).
+    - Avoid running heavy synchronous work inside a Frame Processor. Offload processing to a background thread using `runAsync`.
+    - Enable buffer compression when only using video output (no Frame Processors): the Camera component does this automatically when `video={true}` and no `frameProcessor` is set.
+    - Reduce camera resolution by selecting a format with a lower `videoWidth` / `videoHeight`.
+    - See the [performance guide](/guides/performance) for more optimization strategies.
+  </Accordion>
+
+  <Accordion title="App crashes on startup">
+    - Check that `react-native-vision-camera` is correctly linked. Run `npx react-native doctor` and verify there are no linking issues.
+    - On iOS, confirm you created a Swift bridging header (see the iOS build issues accordion above). Missing bridging headers cause runtime crashes.
+    - On Android, confirm the NDK is installed and `ndkVersion` is set correctly in `build.gradle`.
+    - Check Xcode crash logs or Android Logcat immediately after the crash for the stack trace.
+    - If you see a `system/camera-module-not-found` error, the native module is not registered. Rebuild the app after re-linking.
+  </Accordion>
+
+  <Accordion title="TypeScript errors">
+    - Make sure you are importing from `react-native-vision-camera` and not a sub-path.
+    - Check that your `tsconfig.json` includes the `node_modules` type definitions. A `strict: true` config is recommended.
+    - If you see type errors after upgrading, check the [changelog](https://github.com/mrousavy/react-native-vision-camera/releases) for breaking API changes between versions.
+    - The `CameraDevice`, `PhotoFile`, `VideoFile`, `Frame`, and error types are all exported from the top-level package:
+
+    ```ts
+    import type {
+      CameraDevice,
+      PhotoFile,
+      VideoFile,
+      CameraRuntimeError,
+      CameraCaptureError,
+    } from 'react-native-vision-camera'
+    ```
+  </Accordion>
+
+  <Accordion title="iOS runtime errors without a message">
+    Some native iOS errors do not include a message string. When this happens, an error code is usually attached.
+
+    Look up the numeric error code on [osstatus.com](https://www.osstatus.com) to find the corresponding `AVFoundation` or `CoreMedia` description. Then check the `error.cause` property in your `onError` handler for the raw `code` and `domain` values from `NSError`.
+  </Accordion>
+
+</AccordionGroup>
+
+## Checking runtime diagnostics
+
+### iOS
+
+Open the Xcode console via **View > Debug Area > Activate Console** (`⇧⌘C`) and filter for `VisionCamera`. The library logs session lifecycle events, format selection, and Frame Processor runtime status.
+
+### Android
+
+Open Logcat in Android Studio via **View > Tool Windows > Logcat** (`⌘6`), or run:
+
+```bash
+adb logcat | grep VisionCamera
+```
+
+## Getting help
+
+If none of the above resolves your issue:
+
+<CardGroup cols={2}>
+  <Card title="GitHub issues" icon="github" href="https://github.com/mrousavy/react-native-vision-camera/issues?q=is%3Aissue">
+    Search existing issues. If yours is not already reported, open a new one with your environment details and a minimal reproduction.
+  </Card>
+  <Card title="Camera errors reference" icon="triangle-exclamation" href="/guides/errors">
+    Browse all error codes with descriptions to identify the root cause.
+  </Card>
+</CardGroup>
+
+When opening a GitHub issue, include:
+- VisionCamera version (`npm list react-native-vision-camera`)
+- React Native version
+- Platform (iOS / Android) and OS version
+- Device model
+- Steps to reproduce
+- Relevant Xcode / Logcat logs

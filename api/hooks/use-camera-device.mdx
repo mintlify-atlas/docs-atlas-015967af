@@ -1,0 +1,113 @@
+---
+title: "useCameraDevice"
+description: "Hook to get the best available camera device for a given position and set of physical device requirements."
+---
+
+```ts
+import { useCameraDevice } from 'react-native-vision-camera'
+```
+
+## Signature
+
+```ts
+useCameraDevice(
+  position: CameraPosition,
+  filter?: DeviceFilter
+): CameraDevice | undefined
+```
+
+`useCameraDevice` subscribes to the list of available camera devices and re-renders your component whenever that list changes (e.g. when an external camera is plugged in). It uses a point-scoring system to return the best device that matches your filter.
+
+---
+
+## Parameters
+
+<ParamField body="position" type="CameraPosition" required>
+  The physical position of the camera relative to the phone.
+
+  | Value | Description |
+  |---|---|
+  | `'back'` | Camera on the back of the phone. |
+  | `'front'` | Camera on the front of the phone (selfie). |
+  | `'external'` | An external camera (USB, Continuity Camera, Bluetooth/WiFi). |
+</ParamField>
+
+<ParamField body="filter" type="DeviceFilter" optional>
+  An optional filter object to narrow device selection by physical camera composition.
+
+  <Expandable title="DeviceFilter">
+    <ParamField body="physicalDevices" type="PhysicalCameraDeviceType[]" optional>
+      The desired physical camera lenses the device should consist of.
+
+      | Value | Description |
+      |---|---|
+      | `'wide-angle-camera'` | Standard wide-angle lens (FOV 60°–94°). |
+      | `'ultra-wide-angle-camera'` | Ultra-wide ("fish-eye") lens (FOV 94°+). |
+      | `'telephoto-camera'` | Telephoto (zoom) lens (FOV 60° or lower). |
+
+      Devices with fewer physical cameras start faster. Devices with more physical cameras support smooth optical zoom switching.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+---
+
+## Return Value
+
+<ResponseField name="device" type="CameraDevice | undefined">
+  The best matching `CameraDevice` for the given position and filter. Returns `undefined` if:
+
+  - No camera exists at the specified `position`.
+  - The hook hasn't yet received the device list (brief initial state).
+  - All cameras at the given position were disconnected (only possible for `'external'`).
+</ResponseField>
+
+---
+
+## Examples
+
+### Back camera (simple)
+
+```tsx
+function App() {
+  const device = useCameraDevice('back')
+
+  if (device == null) return <NoCameraView />
+
+  return <Camera device={device} isActive={true} style={StyleSheet.absoluteFill} />
+}
+```
+
+### Front camera
+
+```tsx
+const device = useCameraDevice('front')
+```
+
+### Triple camera (ultra-wide + wide + telephoto)
+
+Prefer a device that combines all three lenses so the user can zoom smoothly across the full range:
+
+```tsx
+const device = useCameraDevice('back', {
+  physicalDevices: ['ultra-wide-angle-camera', 'wide-angle-camera', 'telephoto-camera'],
+})
+```
+
+### Single wide-angle camera (faster startup)
+
+Prefer a simpler device that starts up faster when zoom switching isn't needed:
+
+```tsx
+const device = useCameraDevice('back', {
+  physicalDevices: ['wide-angle-camera'],
+})
+```
+
+---
+
+## Notes
+
+- The hook internally uses `useCameraDevices()`, which re-renders whenever the device list changes. This means your component will automatically update when an external camera is plugged in or out.
+- If you do not pass a `physicalDevices` filter, the hook prefers the standard wide-angle camera and favors simpler (single-camera) devices over multi-camera logical devices.
+- For one-time, non-reactive access outside a component, use `Camera.getAvailableCameraDevices()` and `getCameraDevice()` directly.

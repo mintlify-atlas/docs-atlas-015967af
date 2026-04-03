@@ -1,0 +1,231 @@
+---
+title: "QR/Barcode scanning"
+description: "Scan QR codes, barcodes, and other machine-readable codes in real time using platform-native APIs."
+sidebarTitle: "QR/Barcode scanning"
+---
+
+The Code Scanner is a dedicated camera output — separate from photo and video — that detects machine-readable codes in each camera frame and returns their decoded values and on-screen positions.
+
+## What the Code Scanner detects
+
+| Category | Types |
+|---|---|
+| 2D codes | QR, Aztec, Data Matrix, PDF-417 |
+| EAN barcodes | EAN-13, EAN-8 |
+| Code barcodes | Code-128, Code-39, Code-93 |
+| GS1 barcodes | GS1 DataBar, GS1 DataBar Limited, GS1 DataBar Expanded (+ stacked variants) |
+| Other barcodes | Codabar, ITF, ITF-14, UPC-E, UPC-A |
+
+On iOS the Code Scanner uses the platform-native Vision/AVFoundation APIs. On Android it uses [Google MLKit Vision Barcode Scanning](https://developers.google.com/ml-kit/vision/barcode-scanning) (model size: ~2.2 MB), which must be included in your app before use.
+
+## Android setup
+
+<Tabs>
+  <Tab title="React Native">
+    Add the `VisionCamera_enableCodeScanner` flag to your `gradle.properties`:
+
+    ```groovy
+    VisionCamera_enableCodeScanner=true
+    ```
+  </Tab>
+  <Tab title="Expo">
+    Add `enableCodeScanner` to the VisionCamera plugin entry in your `app.json` (or `app.config.js`):
+
+    ```json
+    {
+      "name": "my-app",
+      "plugins": [
+        [
+          "react-native-vision-camera",
+          {
+            "cameraPermissionText": "$(PRODUCT_NAME) needs camera access",
+            "enableCodeScanner": true
+          }
+        ]
+      ]
+    }
+    ```
+  </Tab>
+</Tabs>
+
+<Note>
+  No additional setup is needed on iOS — the Code Scanner works out of the box.
+</Note>
+
+## Usage
+
+Create a `CodeScanner` configuration and pass it to the `codeScanner` prop on `<Camera>`.
+
+<Tabs>
+  <Tab title="useCodeScanner (recommended)">
+    The `useCodeScanner` hook memoizes the scanner configuration automatically, preventing unnecessary camera session rebuilds when the component re-renders:
+
+    ```tsx
+    import { Camera, useCameraDevice, useCodeScanner } from 'react-native-vision-camera'
+
+    function App() {
+      const device = useCameraDevice('back')
+
+      const codeScanner = useCodeScanner({
+        codeTypes: ['qr', 'ean-13'],
+        onCodeScanned: (codes, frame) => {
+          for (const code of codes) {
+            console.log(`Type: ${code.type}, Value: ${code.value}`)
+          }
+        },
+      })
+
+      if (device == null) return null
+
+      return (
+        <Camera
+          device={device}
+          isActive={true}
+          codeScanner={codeScanner}
+        />
+      )
+    }
+    ```
+  </Tab>
+  <Tab title="Imperative API">
+    You can create the `CodeScanner` object directly, but you must memoize it yourself (e.g. with `useMemo`) to avoid triggering camera session rebuilds:
+
+    ```tsx
+    import { useMemo, useRef } from 'react'
+    import { Camera, useCameraDevice } from 'react-native-vision-camera'
+    import type { CodeScanner } from 'react-native-vision-camera'
+
+    function App() {
+      const device = useCameraDevice('back')
+
+      const codeScanner = useMemo<CodeScanner>(() => ({
+        codeTypes: ['qr', 'ean-13'],
+        onCodeScanned: (codes, frame) => {
+          for (const code of codes) {
+            console.log(`Type: ${code.type}, Value: ${code.value}`)
+          }
+        },
+      }), [])
+
+      if (device == null) return null
+
+      return (
+        <Camera
+          device={device}
+          isActive={true}
+          codeScanner={codeScanner}
+        />
+      )
+    }
+    ```
+
+    <Warning>
+      Every time the `codeScanner` object changes identity, VisionCamera rebuilds the camera session. Always memoize it.
+    </Warning>
+  </Tab>
+</Tabs>
+
+## CodeScanner options
+
+<ParamField path="codeScanner.codeTypes" type="CodeType[]" required>
+  An array of code types to scan for. Only detecting the types you need improves performance. See the full list of valid types below.
+</ParamField>
+
+<ParamField path="codeScanner.onCodeScanned" type="(codes: Code[], frame: CodeScannerFrame) => void" required>
+  Callback invoked whenever codes are detected. `codes` contains all codes found in the current frame; `frame` describes the full scanning area (width and height in pixels).
+</ParamField>
+
+<ParamField path="codeScanner.regionOfInterest" type="{ x: number; y: number; width: number; height: number }">
+  Crops the scanner's active area to a specific region. Coordinates are relative to the full frame. iOS only.
+</ParamField>
+
+### Supported code types
+
+All valid values for `codeTypes`:
+
+```ts
+type CodeType =
+  | 'qr'
+  | 'aztec'
+  | 'data-matrix'
+  | 'pdf-417'
+  | 'ean-13'
+  | 'ean-8'
+  | 'upc-a'
+  | 'upc-e'
+  | 'code-128'
+  | 'code-39'
+  | 'code-93'
+  | 'codabar'
+  | 'itf'
+  | 'itf-14'
+  | 'gs1-data-bar'
+  | 'gs1-data-bar-limited'
+  | 'gs1-data-bar-expanded'
+```
+
+## Code result
+
+Each detected code in the `codes` array is a `Code` object:
+
+| Property | Type | Description |
+|---|---|---|
+| `type` | `CodeType \| 'unknown'` | The detected code type |
+| `value` | `string \| undefined` | The decoded string value, or `undefined` if decoding failed |
+| `frame` | `{ x, y, width, height }` | Bounding box of the code relative to the camera preview (in dp) |
+| `corners` | `Point[]` | The four corner points of the code relative to the camera preview (in dp) |
+
+Example: displaying the decoded value and position:
+
+```ts
+onCodeScanned: (codes, frame) => {
+  for (const code of codes) {
+    if (code.value == null) continue
+
+    console.log(`Scanned ${code.type}: ${code.value}`)
+
+    if (code.frame != null) {
+      const { x, y, width, height } = code.frame
+      console.log(`Location: (${x}, ${y}) ${width}×${height} dp`)
+    }
+  }
+}
+```
+
+## Platform differences
+
+### UPC-A vs EAN-13 on iOS
+
+iOS does not have a separate `upc-a` code type. Instead, iOS reports UPC-A codes as `ean-13` by prepending a `0` digit (EAN-13 is a superset of UPC-A).
+
+If you configure for `'upc-a'` types, the code type you receive on iOS will be `'ean-13'`:
+
+```ts
+const codeScanner = useCodeScanner({
+  codeTypes: ['upc-a'],
+  onCodeScanned: (codes) => {
+    for (const code of codes) {
+      // On Android: code.type === 'upc-a'
+      // On iOS:     code.type === 'ean-13'
+      if (code.type === 'ean-13' && code.value?.startsWith('0')) {
+        const upcA = code.value.slice(1) // strip the leading 0
+        console.log('UPC-A:', upcA)
+      }
+    }
+  },
+})
+```
+
+### ITF and ITF-14
+
+- **ITF** (Interleaved 2 of 5) is supported on both platforms. On Android, ITF codes must be at least 6 characters long.
+- **ITF-14** is a subtype of ITF that always encodes exactly 14 digits. It is only natively reported on iOS. On Android, ITF-14 codes are reported as `'itf'` — enforce the 14-character constraint in your own code if needed.
+
+<CardGroup cols={2}>
+  <Card title="Preview" icon="eye" href="/guides/preview">
+    Configure resize mode, frame rate, and preview overlays.
+  </Card>
+  <Card title="Frame Processors" icon="microchip" href="/guides/frame-processors">
+    Run custom ML models on every camera frame using JSI worklets.
+  </Card>
+</CardGroup>

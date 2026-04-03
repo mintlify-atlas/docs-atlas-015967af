@@ -1,0 +1,105 @@
+---
+title: "VisionCamera V5"
+description: "Learn about VisionCamera V5, the next major version rewritten with Nitro Modules, featuring faster performance, multi-camera sessions, depth data, and improved Frame Processor architecture."
+---
+
+VisionCamera V5 is the next major milestone for `react-native-vision-camera`. It is rewritten from the ground up using [Nitro Modules](https://nitro.margelo.com) and delivers significant improvements in performance, architecture, and developer ergonomics.
+
+<Warning>
+  The current stable release is **V4**. V5 is in sponsor-only early access and is not yet available on npm. See below for how to get access.
+</Warning>
+
+## What's new in V5
+
+### Faster performance with Nitro Modules
+
+V5 replaces the legacy bridge architecture with [Nitro Modules](https://nitro.margelo.com), Margelo's next-generation native module system. Nitro Modules use C++ JSI bindings with zero bridge overhead, resulting in significantly faster method calls and lower latency across the entire camera pipeline.
+
+An in-memory `Photo` type allows captured frames to be converted **entirely in-memory** to a [`react-native-nitro-image`](https://github.com/mrousavy/react-native-nitro-image) type, eliminating the file I/O round-trip that V4 requires for every photo capture.
+
+### Improved Frame Processor architecture
+
+Frame Processor Plugins in V5 are standard Nitro Modules. This means:
+
+- Plugins work on every Worklet Runtime out of the box — no special registration required.
+- Plugins accept typed extra parameters and return typed values.
+- Plugins can even return a `Frame` object, enabling chained processing pipelines.
+
+### New Skia Frame Processors
+
+Skia Frame Processors in V5 gain full support for:
+
+- `react-native-worklets` and Reanimated `SharedValue` bindings
+- Focus-aware rendering, thanks to the new coordinate system foundation
+
+### Full manual controls
+
+V5 exposes complete manual control over the camera's exposure, focus, and white balance — giving you frame-level precision over the image pipeline.
+
+### Multi-camera sessions
+
+Run the front and back camera simultaneously in a single session. This enables picture-in-picture viewfinders, multi-angle capture, and other dual-camera experiences without juggling separate camera instances.
+
+### Depth data streaming
+
+V5 adds native depth data output with synchronization between the main video frame and the depth frame. This enables AR and computational photography features that require per-pixel distance information.
+
+### Unified barcode scanner
+
+The barcode scanner API is unified across platforms:
+
+- **Android**: always uses MLKit
+- **iOS**: uses native `AVCaptureMetadataOutput` (new!) or MLKit — your choice
+- Works as both a declarative output and an imperative Frame Processor Plugin
+
+### Coordinate system conversions
+
+V5 includes native support for converting between coordinate systems — for example from a `Frame` coordinate to a preview coordinate, or from a `Barcode` detection result to a Skia canvas point (including when using Skia Frame Processors).
+
+### GPU-accelerated frame resizer
+
+A built-in GPU-accelerated utility resizes frames and converts between pixel formats and data types inside the Frame Processor pipeline, reducing CPU overhead for common preprocessing tasks.
+
+## Feature comparison
+
+| Feature | V4 (current stable) | V5 (early access) |
+|---|---|---|
+| Native module system | Legacy bridge | Nitro Modules |
+| Frame Processor Plugins | Custom registration | Standard Nitro Modules |
+| Photo capture | File I/O | In-memory or file I/O |
+| Skia Frame Processors | Basic | SharedValue support, focus-aware |
+| Manual focus/exposure/WB | Limited | Full control |
+| Multi-camera sessions | No | Yes |
+| Depth data | No | Yes |
+| Barcode scanner | MLKit (Android) / native (iOS) | Unified (MLKit on both) |
+| Coordinate system conversions | Manual | Built-in |
+| GPU frame resizer | No | Yes |
+
+## Early access
+
+V5 is currently **sponsor-only**. If you sponsor the author on GitHub at the $20/month tier or higher, you get access to the private V5 repository where you can:
+
+- Try out V5 early
+- Submit feedback and feature requests via GitHub issues
+- Follow the development roadmap
+
+<Card title="Sponsor on GitHub Sponsors" icon="heart" href="https://github.com/sponsors/mrousavy">
+  Sponsor mrousavy at $20/month or more to unlock access to the VisionCamera V5 private repository.
+</Card>
+
+<Note>
+  V5 is actively developed and APIs may change before the public release. Sponsor access gives you early influence over the final API design.
+</Note>
+
+## Staying on V4
+
+If you are building a production app today, continue using the stable V4 release. V4 is actively maintained and receives bug fixes.
+
+<CardGroup cols={2}>
+  <Card title="Getting started" icon="rocket" href="/guides/getting-started">
+    Install VisionCamera V4 and get your first camera preview running.
+  </Card>
+  <Card title="Frame Processors" icon="microchip" href="/guides/frame-processors">
+    Run JS worklets on every camera frame with the V4 Frame Processor API.
+  </Card>
+</CardGroup>

@@ -1,0 +1,171 @@
+---
+title: Interacting with Frame Processors
+description: Share data between Frame Processors and React using shared values, runAsync, and runAtTargetFps.
+---
+
+## Accessing JS values
+
+Because Frame Processors run as [Worklets](https://github.com/margelo/react-native-worklets-core/blob/main/docs/WORKLETS.md), you can use JavaScript values from the outer React scope directly inside a Frame Processor. Values are read-only copied into the worklet context:
+
+```tsx
+// User can look for a specific object type
+const targetObject = 'banana'
+
+const frameProcessor = useFrameProcessor((frame) => {
+  'worklet'
+  const objects = detectObjects(frame)
+  const matches = objects.filter((o) => o.type === targetObject)
+  console.log(`Detected ${matches.length} bananas!`)
+}, [targetObject])
+```
+
+List every outer-scope value the Frame Processor reads in the dependency array (second argument of `useFrameProcessor`), just as you would with `useMemo` or `useCallback`.
+
+## Shared values
+
+[Shared Values](https://github.com/margelo/react-native-worklets-core/blob/main/docs/WORKLETS.md#shared-values) can be written to inside a Frame Processor and read from any other context — React JS, Skia, or Reanimated — without crossing the bridge:
+
+```tsx
+const bananas = useSharedValue([])
+
+// Write detected objects from the Frame Processor
+const frameProcessor = useFrameProcessor((frame) => {
+  'worklet'
+  const objects = detectObjects(frame)
+  bananas.value = objects.filter((o) => o.type === 'banana')
+}, [bananas])
+
+// Read them in a Skia draw callback
+const onDraw = useDrawCallback((canvas) => {
+  for (const banana of bananas.value) {
+    const rect = Skia.XYWHRect(
+      banana.x,
+      banana.y,
+      banana.width,
+      banana.height,
+    )
+    const paint = Skia.Paint()
+    paint.setColor(Skia.Color('red'))
+    canvas.drawRect(rect, paint)
+  }
+})
+```
+
+<Tip>
+  Prefer Shared Values over React state (`useState`) when sharing data between a Frame Processor and the React UI. Shared Values avoid re-renders and never cross the bridge.
+</Tip>
+
+## Calling JS functions from a frame processor
+
+To call back to the React JS thread from inside a Frame Processor, use `Worklets.createRunOnJS(...)`:
+
+```tsx
+const onFaceDetected = Worklets.createRunOnJS((face: Face) => {
+  navigation.push('FiltersPage', { face: face })
+})
+
+const frameProcessor = useFrameProcessor((frame) => {
+  'worklet'
+  const faces = scanFaces(frame)
+  if (faces.length > 0) {
+    onFaceDetected(faces[0])
+  }
+}, [onFaceDetected])
+```
+
+<Warning>
+  Calls made via `createRunOnJS` are asynchronous and are dispatched to the React JS thread. Do not call them every frame if you don't need to — use `runAtTargetFps` to throttle.
+</Warning>
+
+## Scheduling
+
+By default, Frame Processors run synchronously in the Camera pipeline. A Frame Processor must finish executing before the next frame arrives, otherwise that frame is dropped.
+
+| Frame rate | Time budget |
+|------------|-------------|
+| 30 FPS     | ~33ms       |
+| 60 FPS     | ~16ms       |
+
+### Running asynchronously with `runAsync`
+
+For longer-running work, use `runAsync(frame, fn)` to offload processing to a separate asynchronous context. This lets the Camera pipeline keep running at full speed while heavy work executes in the background.
+
+<Note>
+  Only one `runAsync` call executes at a time. If a new call arrives while the previous one is still running, the new call is dropped. `runAsync` is **asynchronous but not parallel**.
+</Note>
+
+For example, if your Camera runs at 60 FPS (16ms per frame) but a heavy ML face detection plugin takes 500ms, you can run it inside `runAsync` so the Camera still receives frames at 60 FPS while face detection runs at ~2 FPS:
+
+```ts
+const frameProcessor = useFrameProcessor((frame) => {
+  'worklet'
+  console.log("Running synchronously at 60 FPS!")
+
+  runAsync(frame, () => {
+    'worklet'
+    console.log("Running asynchronously — possibly at a lower FPS rate!")
+    const faces = detectFaces(frame)
+  })
+}, [])
+```
+
+<Warning>
+  `runAsync` cannot be used to draw to a Frame inside a Skia Frame Processor.
+</Warning>
+
+#### `runAsync` signature
+
+<ParamField path="frame" type="Frame" required>
+  The current frame from the Frame Processor. The frame's reference count is incremented so it stays valid for the duration of the async call.
+</ParamField>
+
+<ParamField path="func" type="() => void" required>
+  The worklet function to execute asynchronously. Must include the `'worklet'` directive.
+</ParamField>
+
+### Throttling with `runAtTargetFps`
+
+If a processing step does not need to run on every frame, use `runAtTargetFps(fps, fn)` to execute it only at the specified rate. The function still runs synchronously on the main Frame Processor thread — frames that arrive faster than the target rate are skipped:
+
+```ts
+const TARGET_FPS = 2
+
+const frameProcessor = useFrameProcessor((frame) => {
+  'worklet'
+  console.log("Running synchronously at 60 FPS!")
+
+  runAtTargetFps(TARGET_FPS, () => {
+    'worklet'
+    console.log("Running synchronously at 2 FPS!")
+    const brightness = detectBrightness(frame)
+  })
+}, [])
+```
+
+#### `runAtTargetFps` signature
+
+<ParamField path="fps" type="number" required>
+  The target frame rate at which `func` should be called. For example, `2` means twice per second.
+</ParamField>
+
+<ParamField path="func" type="() => T" required>
+  The worklet function to execute. Must include the `'worklet'` directive. Returns `T` when called, or `undefined` when skipped.
+</ParamField>
+
+## Error handling
+
+Errors thrown inside a Frame Processor propagate to the React JS thread. You can catch them inside the Frame Processor using a `try/catch` block:
+
+```ts
+const frameProcessor = useFrameProcessor((frame) => {
+  'worklet'
+  try {
+    const codes = scanCodes(frame, { codeType: 'qr' })
+    console.log(codes)
+  } catch (e) {
+    console.error(`Frame Processor error: ${e.message}`)
+  }
+}, [])
+```
+
+Errors thrown inside `runAsync` are automatically forwarded to the JS thread via `throwErrorOnJS`.

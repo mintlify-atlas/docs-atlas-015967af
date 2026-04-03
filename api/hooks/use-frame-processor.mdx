@@ -1,0 +1,206 @@
+---
+title: "useFrameProcessor"
+description: "Hook to create a memoized frame processor function that runs on every camera frame in a background worklet thread."
+---
+
+```ts
+import { useFrameProcessor } from 'react-native-vision-camera'
+```
+
+## Signature
+
+```ts
+useFrameProcessor(
+  frameProcessor: (frame: Frame) => void,
+  dependencies: DependencyList
+): ReadonlyFrameProcessor
+```
+
+`useFrameProcessor` memoizes a frame processor so that passing it to `<Camera frameProcessor={...} />` does not rebuild the camera session on every render. It behaves like `useCallback` — the memoized function is only recreated when one of the `dependencies` changes.
+
+---
+
+## The `'worklet'` Directive
+
+The frame processor function **must** include the `'worklet'` directive as its first statement. Without it, Reanimated/Worklets will not compile the function into a worklet and it will not execute on the camera thread.
+
+```ts
+const frameProcessor = useFrameProcessor((frame) => {
+  'worklet' // <-- required
+  // your processing logic here
+}, [])
+```
+
+---
+
+## Parameters
+
+<ParamField body="frameProcessor" type="(frame: Frame) => void" required>
+  A worklet function called for every frame the camera captures. The function receives a `Frame` object.
+
+  <Expandable title="Frame">
+    <ParamField body="width" type="number">
+      The width of the frame in pixels.
+    </ParamField>
+    <ParamField body="height" type="number">
+      The height of the frame in pixels.
+    </ParamField>
+    <ParamField body="bytesPerRow" type="number">
+      The number of bytes per row in the pixel buffer.
+    </ParamField>
+    <ParamField body="planesCount" type="number">
+      The number of planes in this frame (e.g. `2` for YUV NV12).
+    </ParamField>
+    <ParamField body="isValid" type="boolean">
+      Whether the underlying native buffer is still valid. A frame is valid only while the frame processor (or a `runAsync` call) is actively running.
+    </ParamField>
+    <ParamField body="isMirrored" type="boolean">
+      Whether the frame is mirrored (e.g. front camera).
+    </ParamField>
+    <ParamField body="timestamp" type="number">
+      The timestamp of the frame relative to the host system's clock.
+    </ParamField>
+    <ParamField body="orientation" type="Orientation">
+      The orientation of the frame buffer relative to the desired output orientation. Use this to pass the correct rotation to ML libraries instead of rotating the pixel buffer.
+    </ParamField>
+    <ParamField body="pixelFormat" type="PixelFormat">
+      The pixel format of the frame (`'yuv'` or `'rgb'`), as configured by the `pixelFormat` Camera prop.
+    </ParamField>
+    <ParamField body="toArrayBuffer()" type="() => ArrayBuffer">
+      Copies the frame data from GPU memory to a CPU `ArrayBuffer`. This is an expensive operation.
+    </ParamField>
+    <ParamField body="getNativeBuffer()" type="() => NativeBuffer">
+      Returns a pointer to the native platform buffer (`CVPixelBufferRef` on iOS, `AHardwareBuffer*` on Android). You must call `NativeBuffer.delete()` when done.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="dependencies" type="DependencyList" required>
+  A React dependency array — the same as the second argument to `useCallback`. The frame processor is recreated only when these values change. Pass `[]` if the processor has no external dependencies.
+</ParamField>
+
+---
+
+## Return Value
+
+<ResponseField name="frameProcessor" type="ReadonlyFrameProcessor">
+  A memoized `ReadonlyFrameProcessor` object with the shape:
+
+  ```ts
+  interface ReadonlyFrameProcessor {
+    frameProcessor: (frame: Frame) => void
+    type: 'readonly'
+  }
+  ```
+
+  Pass this directly to `<Camera frameProcessor={...} />`.
+</ResponseField>
+
+---
+
+## Basic Example
+
+```tsx
+import { Camera, useCameraDevice, useFrameProcessor } from 'react-native-vision-camera'
+
+function App() {
+  const device = useCameraDevice('back')
+
+  const frameProcessor = useFrameProcessor((frame) => {
+    'worklet'
+    console.log(`Frame: ${frame.width}x${frame.height} (${frame.pixelFormat})`)
+  }, [])
+
+  if (device == null) return null
+
+  return (
+    <Camera
+      style={StyleSheet.absoluteFill}
+      device={device}
+      isActive={true}
+      frameProcessor={frameProcessor}
+    />
+  )
+}
+```
+
+---
+
+## runAsync
+
+`runAsync` lets you offload heavy work (e.g. ML inference) to a secondary asynchronous context so the camera can keep running at full FPS without dropping frames.
+
+Only one `runAsync` call executes at a time — it is **asynchronous but not parallel**. If the async context is still busy when the next frame arrives, that frame's `runAsync` call is dropped.
+
+```tsx
+import { useFrameProcessor, runAsync } from 'react-native-vision-camera'
+
+const frameProcessor = useFrameProcessor((frame) => {
+  'worklet'
+  // This runs every frame on the camera thread (fast)
+  console.log('New Frame')
+
+  // This runs asynchronously, potentially at a lower rate
+  runAsync(frame, () => {
+    'worklet'
+    const faces = detectFaces(frame)
+    console.log(`Detected ${faces.length} face(s)`)
+  })
+}, [])
+```
+
+**Note:** `runAsync` cannot be used inside a Skia Frame Processor to draw to the frame.
+
+---
+
+## runAtTargetFps
+
+`runAtTargetFps` throttles a piece of code so it runs at most at the given FPS rate, even if the camera is running faster. The function still executes synchronously on the camera thread — it is only called less frequently.
+
+```tsx
+import { useFrameProcessor, runAtTargetFps } from 'react-native-vision-camera'
+
+const frameProcessor = useFrameProcessor((frame) => {
+  'worklet'
+  // Runs on every frame
+  console.log('Frame received')
+
+  // Runs at most 5 times per second
+  runAtTargetFps(5, () => {
+    'worklet'
+    const objects = detectObjects(frame)
+    console.log(`Objects: ${objects.length}`)
+  })
+}, [])
+```
+
+---
+
+## useSkiaFrameProcessor
+
+For drawing overlays directly onto frames, use `useSkiaFrameProcessor` instead. It provides a `DrawableFrame` that extends both `Frame` and Skia's `SkCanvas`, allowing you to draw shapes, text, and images on top of the camera stream.
+
+```tsx
+import { useSkiaFrameProcessor } from 'react-native-vision-camera'
+
+const frameProcessor = useSkiaFrameProcessor((frame) => {
+  'worklet'
+  // First, render the camera frame to the canvas
+  frame.render()
+
+  // Then draw on top of it using Skia APIs
+  const rect = Skia.XYWHRect(10, 10, 200, 100)
+  frame.drawRect(rect, paint)
+}, [])
+```
+
+`useSkiaFrameProcessor` requires `@shopify/react-native-skia` and `react-native-worklets-core` to be installed.
+
+---
+
+## Notes
+
+- Frame processors run on a dedicated background thread — never on the React JS thread.
+- The `dependencies` array works exactly like `useCallback`. Variables captured from the outer scope (e.g. a shared value from Reanimated) must be included in the dependency array if they are used inside the frame processor.
+- `frame.isValid` becomes `false` after the frame processor returns. To use the frame asynchronously, use `runAsync`, which automatically manages the frame's reference count.
+- Frame processor plugins are native modules that expose worklet functions you can call inside `useFrameProcessor`.

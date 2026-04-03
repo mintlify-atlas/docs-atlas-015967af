@@ -1,0 +1,98 @@
+---
+title: Community Frame Processor Plugins
+description: A curated list of community-built Frame Processor Plugins available on npm.
+---
+
+Frame Processor Plugins are native plugins that process Camera frames and return values to your JavaScript Frame Processor. They are written in native languages such as Java/Kotlin, Objective-C/Swift, or C++ to take advantage of GPU acceleration, low-level APIs, and high performance.
+
+Like React Native libraries, Frame Processor Plugins are distributed through npm and support autolinking.
+
+## Plugin list
+
+<CardGroup cols={2}>
+  <Card title="react-native-fast-tflite" icon="microchip" href="https://github.com/mrousavy/react-native-fast-tflite">
+    Run any TensorFlow Lite model in React Native, written in C++ with GPU acceleration.
+  </Card>
+  <Card title="vision-camera-resize-plugin" icon="crop" href="https://github.com/mrousavy/vision-camera-resize-plugin">
+    Fast frame resizing, cropping, and YUV/RGB pixel-format conversion using SIMD and CPU vector acceleration.
+  </Card>
+  <Card title="vision-camera-image-labeler" icon="tag" href="https://github.com/mrousavy/vision-camera-image-labeler">
+    Label images using MLKit Vision Image Labeler.
+  </Card>
+  <Card title="vision-camera-face-detector" icon="face-smile" href="https://github.com/rodgomesc/vision-camera-face-detector">
+    Detect faces using MLKit Vision Face Detector.
+  </Card>
+  <Card title="vision-camera-qrcode-scanner" icon="qrcode" href="https://github.com/rodgomesc/vision-camera-qrcode-scanner">
+    Read barcodes using MLKit Vision QR Code Scanning.
+  </Card>
+  <Card title="vision-camera-barcode-scanner" icon="barcode" href="https://github.com/mgcrea/vision-camera-barcode-scanner">
+    High performance barcode scanner using VisionCamera.
+  </Card>
+  <Card title="react-native-fast-opencv" icon="image" href="https://github.com/lukaszkurantdev/react-native-fast-opencv">
+    Image processing using OpenCV, written in C++ with full function and object management from JavaScript.
+  </Card>
+  <Card title="vision-camera-ocr" icon="font" href="https://github.com/aarongrider/vision-camera-ocr">
+    Detect text in real time using MLKit Text Detector (OCR).
+  </Card>
+</CardGroup>
+
+### Additional plugins
+
+| Plugin | Description |
+|--------|-------------|
+| [Colorwaver](https://github.com/mrousavy/Colorwaver) | Detect color palettes in the real world |
+| [vision-camera-zxing](https://github.com/xulihang/vision-camera-zxing) | Read barcodes using ZXing |
+| [vision-camera-dynamsoft-barcode-reader](https://github.com/xulihang/vision-camera-dynamsoft-barcode-reader) | Read barcodes using Dynamsoft Barcode Reader |
+| [vision-camera-dynamsoft-label-recognizer](https://github.com/xulihang/vision-camera-dynamsoft-label-recognizer) | Recognize text on labels, MRZ passports, etc. using Dynamsoft Label Recognizer |
+| [vision-camera-dynamsoft-document-normalizer](https://github.com/tony-xlh/vision-camera-dynamsoft-document-normalizer) | Scan documents with border detection and perspective transformation using Dynamsoft |
+| [vision-camera-cropper](https://github.com/tony-xlh/vision-camera-cropper) | Crop frames and save them to files or as base64 |
+| [vision-camera-base64](https://github.com/yasintorun/vision-camera-base64) | Convert a Frame to a base64 string |
+| [react-native-vision-camera-face-detector](https://github.com/luicfrr/react-native-vision-camera-face-detector) | Detect faces using MLKit Vision Face Detector, compatible with Skia Frame Processors |
+| [react-native-vision-camera-ocr-plus](https://github.com/jamenamcinteer/react-native-vision-camera-ocr-plus) | On-device text recognition (OCR) and translation using ML Kit |
+| [react-native-vision-camera-v3-face-detection](https://github.com/gev2002/react-native-vision-camera-v3-face-detection) | Face detection using Google ML Kit |
+| [react-native-vision-camera-v3-image-labeling](https://github.com/gev2002/react-native-vision-camera-v3-image-labeling) | Image labeling using Google ML Kit |
+| [react-native-vision-camera-v3-pose-detection](https://github.com/gev2002/react-native-vision-camera-v3-pose-detection) | Pose detection using Google ML Kit |
+| [react-native-vision-camera-v3-barcode-scanner](https://github.com/gev2002/react-native-vision-camera-v3-barcode-scanner) | Barcode scanning using Google ML Kit |
+| [react-native-vision-camera-v3-text-recognition](https://github.com/gev2002/react-native-vision-camera-v3-text-recognition) | Text recognition using Google ML Kit |
+
+## Installing a plugin
+
+<Steps>
+  <Step title="Install the package">
+    ```bash
+    npm i vision-camera-xxxxx
+    ```
+
+    For iOS, also run:
+
+    ```bash
+    cd ios && pod install
+    ```
+  </Step>
+  <Step title="Rebuild your app">
+    Native plugins require a full rebuild to autolink correctly.
+  </Step>
+  <Step title="Use the plugin in your Frame Processor">
+    ```tsx
+    import { useFaceDetector } from 'vision-camera-face-detector'
+
+    function App() {
+      const { detectFaces } = useFaceDetector()
+
+      const frameProcessor = useFrameProcessor((frame) => {
+        'worklet'
+        const faces = detectFaces(frame)
+        console.log(`Detected ${faces.length} face(s)`)
+      }, [detectFaces])
+
+      return <Camera frameProcessor={frameProcessor} {...props} />
+    }
+    ```
+  </Step>
+</Steps>
+
+## Finding more plugins
+
+Search npm for [`vision-camera`](https://www.npmjs.com/search?q=vision-camera) to find additional community plugins. Plugins typically follow the naming convention `vision-camera-*` or `react-native-vision-camera-*`.
+
+To add your own plugin to the official VisionCamera plugin list, open a pull request to [edit the community plugins page](https://github.com/mrousavy/react-native-vision-camera/edit/main/docs/docs/guides/FRAME_PROCESSOR_PLUGINS_COMMUNITY.mdx) in the VisionCamera repository.

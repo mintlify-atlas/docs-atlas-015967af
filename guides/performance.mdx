@@ -1,0 +1,228 @@
+---
+title: Performance
+description: Tips for reducing CPU and memory usage, speeding up camera startup, and keeping frame processing fast.
+---
+
+## Overview
+
+VisionCamera is engineered to match native camera app performance. It uses efficient GPU buffer formats (YUV 4:2:0, lossy-compressed YUV), runs video pipelines in parallel, and implements frame processors in C++.
+
+The following tips let you squeeze out additional performance for your specific use case.
+
+## Choose a simpler camera device
+
+Logical multi-camera devices (e.g. triple cameras) start slower because the OS must initialize multiple physical sensors simultaneously. Prefer a single wide-angle camera when startup speed matters:
+
+<CodeGroup>
+
+```ts hooks
+import { useCameraDevice } from 'react-native-vision-camera'
+
+// Faster — single physical camera
+const device = useCameraDevice('back', {
+  physicalDevices: ['wide-angle-camera'],
+})
+```
+
+```ts imperative
+import { Camera, getCameraDevice } from 'react-native-vision-camera'
+
+const devices = Camera.getAvailableCameraDevices()
+
+// Faster — single physical camera
+const device = getCameraDevice(devices, 'back', {
+  physicalDevices: ['wide-angle-camera'],
+})
+```
+
+</CodeGroup>
+
+<Note>
+When you omit the `physicalDevices` option, VisionCamera already defaults to the simplest available device.
+</Note>
+
+## Use `isActive` instead of unmounting
+
+Fully unmounting and remounting `<Camera>` forces the native session to be torn down and rebuilt, which is slow. Use `isActive` to pause and resume the camera without destroying the session:
+
+```tsx
+// Good — keeps the session warm
+<Camera
+  device={device}
+  isActive={isScreenFocused}
+/>
+
+// Avoid — session is rebuilt every time the screen is visited
+{isScreenFocused && <Camera device={device} isActive={true} />}
+```
+
+## Select an appropriate format resolution
+
+If your output pipeline only needs 1080p, don't capture in 4K. Use the format selector to cap resolution:
+
+<CodeGroup>
+
+```ts hooks
+const format = useCameraFormat(device, [
+  { videoResolution: { width: 1920, height: 1080 } },
+])
+```
+
+```ts imperative
+const format = getCameraFormat(device, [
+  { videoResolution: { width: 1920, height: 1080 } },
+])
+```
+
+</CodeGroup>
+
+## Select an appropriate FPS
+
+Record at the frame rate you actually need. Higher FPS consumes more memory and battery.
+
+```tsx
+// Cap at 30 FPS to reduce memory and heat
+<Camera
+  device={device}
+  isActive={true}
+  format={format}
+  fps={30}
+/>
+```
+
+## Enable buffer compression
+
+Buffer compression reduces memory usage by using a lossy-compressed pixel format in the video pipeline. Enable it whenever you use `video` capture without a frame processor:
+
+```tsx
+<Camera
+  device={device}
+  isActive={true}
+  video={true}
+  enableBufferCompression={true}
+/>
+```
+
+<Note>
+When no `frameProcessor` is attached, `enableBufferCompression` is automatically set to `true`. You only need to set it explicitly when you want to override that default or when combining video capture with a frame processor that can tolerate compressed buffers.
+</Note>
+
+## Use YUV pixel format
+
+The native pixel format is `'yuv'`. Converting to `'rgb'` requires an additional GPU or CPU pass and consumes more memory:
+
+```tsx
+// Default — most efficient
+<Camera pixelFormat="yuv" ... />
+
+// Only use when your frame processor or ML model requires RGB
+<Camera pixelFormat="rgb" ... />
+```
+
+If you use ML plugins that require RGB, check whether a YUV-compatible version is available.
+
+## Disable unused pipelines
+
+Only enable the outputs you actually use. Each pipeline adds initialization overhead and memory pressure:
+
+```tsx
+<Camera
+  device={device}
+  isActive={true}
+  photo={needsPhoto}        // disable if not taking photos
+  video={needsVideo}        // disable if not recording
+  frameProcessor={needsFP ? frameProcessor : undefined}
+  codeScanner={needsScanner ? codeScanner : undefined}
+/>
+```
+
+## Reduce video bit rate
+
+Lower the encoding bit rate to reduce CPU load and output file size. The bit rate can be set relative to the hardware encoder's recommendation or as an absolute Mbps value:
+
+```tsx
+<Camera
+  device={device}
+  isActive={true}
+  video={true}
+  videoBitRate="low"    // 20% below hardware recommendation
+/>
+```
+
+| Value | Multiplier |
+|-------|-----------|
+| `'extra-low'` | 0.6× (40% below) |
+| `'low'` | 0.8× (20% below) |
+| `'normal'` | 1.0× (hardware default) |
+| `'high'` | 1.2× (20% above) |
+| `'extra-high'` | 1.4× (40% above) |
+| `number` | Absolute Mbps override |
+
+## Disable Video HDR when not needed
+
+Video HDR uses 10-bit pixel formats and additional processing. Disable `videoHdr` unless your app explicitly needs HDR output:
+
+```tsx
+<Camera
+  device={device}
+  isActive={true}
+  videoHdr={false}
+/>
+```
+
+## Disable video stabilization when not needed
+
+Video stabilization increases camera session startup time. If you don't need it, leave `videoStabilizationMode` unset:
+
+```tsx
+// No videoStabilizationMode prop — fastest startup
+<Camera device={device} isActive={true} video={true} />
+```
+
+## Fast photo capture
+
+Set `photoQualityBalance` to `'speed'` to prioritize faster shutter response over maximum quality:
+
+```tsx
+<Camera
+  device={device}
+  isActive={true}
+  photo={true}
+  photoQualityBalance="speed"
+/>
+```
+
+For the fastest possible still capture, use `takeSnapshot` instead of `takePhoto`. Snapshots bypass the full photo pipeline and capture directly from the preview or video stream:
+
+```ts
+const snapshot = await camera.current.takeSnapshot({
+  quality: 85,
+})
+```
+
+## Frame processor tips
+
+- Use `runAtTargetFps` to throttle your frame processor to a lower rate when you don't need every frame.
+- Use `runAsync` to offload heavy work to a background thread so it doesn't block the camera pipeline.
+- Prefer `useFrameProcessor` over `useSkiaFrameProcessor` unless you need Skia drawing. The plain frame processor has lower overhead.
+
+See the [frame processor performance tips](/guides/frame-processors-tips) guide for detailed worklet optimization strategies.
+
+## Debugging performance with `enableFpsGraph`
+
+Enable the built-in FPS overlay to visualize how many frames per second your frame processor is actually running at:
+
+```tsx
+<Camera
+  device={device}
+  isActive={true}
+  frameProcessor={frameProcessor}
+  enableFpsGraph={true}
+/>
+```
+
+The overlay renders a live bar graph in the top-left corner of the camera view showing the rolling average FPS. Use it to identify whether your frame processor is keeping up with the camera's output rate.
+
+<Tip>
+Set `enableFpsGraph={true}` only during development. Remove it before shipping to production.
+</Tip>

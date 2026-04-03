@@ -1,0 +1,215 @@
+---
+title: "Taking photos"
+description: "Capture high-resolution photos and snapshots using the Camera's imperative API."
+sidebarTitle: "Taking photos"
+---
+
+The `<Camera>` component exposes imperative methods through a React ref. To take a photo, you call `camera.current.takePhoto()` after the camera has initialized.
+
+## Set up the camera ref
+
+Create a ref typed to `Camera` and attach it to the component:
+
+```tsx
+import { useRef } from 'react'
+import { Camera, useCameraDevice } from 'react-native-vision-camera'
+
+function App() {
+  const camera = useRef<Camera>(null)
+  const device = useCameraDevice('back')
+
+  if (device == null) return null
+
+  return (
+    <Camera
+      ref={camera}
+      device={device}
+      isActive={true}
+      photo={true}
+    />
+  )
+}
+```
+
+<Note>
+  Methods like `takePhoto()` are only available after the `onInitialized` event fires. Call them inside a button handler or after that event, not during the initial render.
+</Note>
+
+## Enable photo capture
+
+Set `photo={true}` on the `<Camera>` component. Without this prop the photo pipeline is not started, and `takePhoto()` will throw.
+
+```tsx
+<Camera
+  ref={camera}
+  device={device}
+  isActive={true}
+  photo={true}
+/>
+```
+
+## Take a photo
+
+Call `takePhoto()` on the ref. It returns a `PhotoFile` written to a temporary directory:
+
+```ts
+const photo = await camera.current.takePhoto()
+console.log(photo.path)   // e.g. "/tmp/VisionCamera-abc123.jpg"
+console.log(photo.width)  // pixels
+console.log(photo.height) // pixels
+```
+
+### TakePhotoOptions
+
+Pass an options object to customize the capture:
+
+<ParamField path="options.flash" type="'on' | 'off' | 'auto'" default="'off'">
+  Flash mode for this capture. `'auto'` enables the flash when the scene is dark. Flash is only available on devices where `device.hasFlash` is `true`.
+</ParamField>
+
+<ParamField path="options.enableAutoRedEyeReduction" type="boolean" default="false">
+  Applies red-eye reduction automatically on flash captures. iOS only.
+</ParamField>
+
+<ParamField path="options.enableAutoDistortionCorrection" type="boolean" default="false">
+  Applies content-aware lens distortion correction. The algorithm avoids correcting faces near the center of the frame but may correct faces near the edges. iOS only.
+</ParamField>
+
+<ParamField path="options.enableShutterSound" type="boolean" default="true">
+  Whether to play the default shutter click sound. Set to `false` to silence it.
+</ParamField>
+
+<ParamField path="options.path" type="string">
+  Custom directory path where the photo file is saved. VisionCamera generates the filename. Defaults to the device's temporary directory.
+</ParamField>
+
+Example with multiple options:
+
+```ts
+const photo = await camera.current.takePhoto({
+  flash: 'auto',
+  enableAutoRedEyeReduction: true,
+  enableShutterSound: false,
+})
+```
+
+### PhotoFile result
+
+`takePhoto()` resolves with a `PhotoFile` object:
+
+| Property | Type | Description |
+|---|---|---|
+| `path` | `string` | Absolute path to the file in the temporary directory |
+| `width` | `number` | Width in pixels |
+| `height` | `number` | Height in pixels |
+| `isRawPhoto` | `boolean` | Whether the file is in RAW format |
+| `orientation` | `Orientation` | Display orientation relative to the camera sensor |
+| `isMirrored` | `boolean` | Whether the photo is mirrored (front camera selfies) |
+| `metadata` | `object` | EXIF metadata — iOS only |
+| `thumbnail` | `object` | Optional embedded thumbnail |
+
+## Flash
+
+Use the `flash` option to control the built-in flash on a per-capture basis:
+
+```ts
+// Always fire flash
+const photo = await camera.current.takePhoto({ flash: 'on' })
+
+// Only fire when the scene is dark
+const photo = await camera.current.takePhoto({ flash: 'auto' })
+
+// Never use flash (default)
+const photo = await camera.current.takePhoto({ flash: 'off' })
+```
+
+<Warning>
+  Flash is only available on devices where `device.hasFlash` is `true`. Most front-facing cameras do not have a flash.
+</Warning>
+
+## Photo quality balance
+
+The `photoQualityBalance` prop on `<Camera>` lets you trade capture speed for image quality:
+
+```tsx
+// Faster capture, lower quality
+<Camera {...props} photoQualityBalance="speed" />
+
+// Default
+<Camera {...props} photoQualityBalance="balanced" />
+
+// Slower capture, highest quality
+<Camera {...props} photoQualityBalance="quality" />
+```
+
+## Resolution
+
+Photos are always captured at the resolution of the selected `format`. By default VisionCamera picks the highest available photo resolution. To target a specific resolution, use `useCameraFormat`:
+
+```tsx
+import { useCameraFormat } from 'react-native-vision-camera'
+
+const format = useCameraFormat(device, [
+  { photoResolution: { width: 1280, height: 720 } }
+])
+
+return <Camera {...props} format={format} photo={true} />
+```
+
+## Taking snapshots
+
+`takeSnapshot()` grabs a frame from the preview (or video pipeline on iOS) and writes it to disk. It can be up to 16 ms — much faster than a full photo capture because it skips the AE/AF/AWB precapture sequence.
+
+```ts
+const snapshot = await camera.current.takeSnapshot({
+  quality: 85   // JPEG quality 0–100, default 100
+})
+```
+
+`takeSnapshot()` returns a `SnapshotFile`, which is a subset of `PhotoFile` with `path`, `width`, `height`, `orientation`, and `isMirrored`.
+
+<Note>
+  On iOS, `takeSnapshot()` requires `video={true}` to be set on the `<Camera>` component because it reads from the video pipeline.
+</Note>
+
+## Reading photo pixel data
+
+To access raw pixel data — for example to upload the file as a blob — read the temporary file with `fetch`:
+
+```ts
+const photo = await camera.current.takePhoto()
+const response = await fetch(`file://${photo.path}`)
+const blob = await response.blob()
+```
+
+## Saving to the camera roll
+
+Photos are stored in a temporary directory. Use [react-native-cameraroll](https://github.com/react-native-cameraroll/react-native-cameraroll) to save them permanently:
+
+<Steps>
+  <Step title="Install react-native-cameraroll">
+    ```bash
+    npm install @react-native-camera-roll/camera-roll
+    ```
+  </Step>
+  <Step title="Save the photo after capture">
+    ```ts
+    import { CameraRoll } from '@react-native-camera-roll/camera-roll'
+
+    const photo = await camera.current.takePhoto()
+
+    await CameraRoll.save(`file://${photo.path}`, {
+      type: 'photo',
+    })
+    ```
+  </Step>
+</Steps>
+
+<CardGroup cols={2}>
+  <Card title="Recording videos" icon="video" href="/guides/recording-videos">
+    Start, pause, and stop video recordings with audio.
+  </Card>
+  <Card title="Camera formats" icon="sliders" href="/guides/formats">
+    Configure resolution, FPS, and HDR for your capture pipeline.
+  </Card>
+</CardGroup>

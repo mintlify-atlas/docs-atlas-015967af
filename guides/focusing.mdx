@@ -1,0 +1,132 @@
+---
+title: "Focusing"
+description: "Programmatically focus the camera to a specific point using the focus() method and tap gesture handlers."
+---
+
+VisionCamera lets you focus the camera to any point in the preview by calling `camera.current.focus(point)`. Focusing adjusts both auto-focus (AF) and auto-exposure (AE) to the specified location.
+
+## The focus method
+
+```ts
+await camera.current.focus({ x: tapX, y: tapY })
+```
+
+The `point` argument is a `{ x: number; y: number }` object expressed in **points** (not pixels) relative to the `<Camera>` view's coordinate system:
+
+- `{ x: 0, y: 0 }` — top-left corner
+- `{ x: viewWidth, y: viewHeight }` — bottom-right corner
+
+<Warning>
+  `focus()` throws a `CameraRuntimeError` if the selected camera device does not support focusing. Check `device.supportsFocus` before calling it.
+</Warning>
+
+## Auto-focus behavior
+
+When you call `focus()`, the camera performs a one-shot AF/AE lock at the given point. After the lock is acquired the camera holds focus until you call `focus()` again or the camera session restarts.
+
+If you do not call `focus()` at all, the camera runs continuous auto-focus (CAF) using its default subject area.
+
+## Tap-to-focus with Gesture Handler
+
+Use [react-native-gesture-handler](https://docs.swmansion.com/react-native-gesture-handler/) to translate a tap on the preview into a focus call. Because the gesture callback runs on the UI thread, use `runOnJS` from Reanimated to call the async `focus()` method on the JS thread:
+
+```tsx
+import { useRef, useCallback } from 'react'
+import { StyleSheet } from 'react-native'
+import { Camera, useCameraDevice } from 'react-native-vision-camera'
+import type { Point } from 'react-native-vision-camera'
+import { Gesture, GestureDetector } from 'react-native-gesture-handler'
+import { runOnJS } from 'react-native-reanimated'
+
+export function App() {
+  const camera = useRef<Camera>(null)
+  const device = useCameraDevice('back')
+
+  const focus = useCallback((point: Point) => {
+    const c = camera.current
+    if (c == null) return
+    c.focus(point)
+  }, [])
+
+  const tapGesture = Gesture.Tap()
+    .onEnd(({ x, y }) => {
+      runOnJS(focus)({ x, y })
+    })
+
+  if (device == null) return null
+
+  return (
+    <GestureDetector gesture={tapGesture}>
+      <Camera
+        ref={camera}
+        style={StyleSheet.absoluteFill}
+        device={device}
+        isActive={true}
+      />
+    </GestureDetector>
+  )
+}
+```
+
+<Note>
+  `runOnJS` is required because gesture callbacks execute as Reanimated worklets on the UI thread, while `camera.current.focus()` must be called from the JavaScript thread.
+</Note>
+
+## Tap-to-focus with React Native's onTouchEnd
+
+If you are not using Gesture Handler, you can use React Native's built-in `onTouchEnd` event on any view that wraps the camera:
+
+```tsx
+import { View } from 'react-native'
+
+function App() {
+  const camera = useRef<Camera>(null)
+  const device = useCameraDevice('back')
+
+  if (device == null) return null
+
+  return (
+    <View
+      style={StyleSheet.absoluteFill}
+      onTouchEnd={(event) => {
+        camera.current?.focus({
+          x: event.nativeEvent.locationX,
+          y: event.nativeEvent.locationY,
+        })
+      }}
+    >
+      <Camera
+        ref={camera}
+        style={StyleSheet.absoluteFill}
+        device={device}
+        isActive={true}
+      />
+    </View>
+  )
+}
+```
+
+<Tip>
+  `event.nativeEvent.locationX` and `event.nativeEvent.locationY` are already in the coordinate space of the receiving view, so they map directly to the `focus()` point coordinates when the wrapping `View` and the `<Camera>` share the same bounds (e.g. both use `StyleSheet.absoluteFill`).
+</Tip>
+
+## Checking focus support
+
+Not all camera devices support programmatic focusing. Check `device.supportsFocus` before showing focus UI or calling `focus()`:
+
+```ts
+if (device.supportsFocus) {
+  await camera.current.focus({ x: tapX, y: tapY })
+} else {
+  console.log('This device does not support focusing.')
+}
+```
+
+<CardGroup cols={2}>
+  <Card title="Zooming" icon="magnifying-glass" href="/guides/zooming">
+    Implement pinch-to-zoom with Reanimated and Gesture Handler.
+  </Card>
+  <Card title="Exposure" icon="sun" href="/guides/exposure">
+    Adjust exposure bias alongside auto-focus and auto-exposure.
+  </Card>
+</CardGroup>

@@ -1,0 +1,73 @@
+---
+title: Introduction
+description: VisionCamera is a powerful, high-performance camera library for React Native. It gives you full control over the camera pipeline — from device selection and format configuration to frame processing and media capture.
+keywords: [react-native, camera, vision camera, introduction, overview]
+---
+
+## What is VisionCamera?
+
+VisionCamera is a React Native library that exposes the full native camera APIs on iOS (AVFoundation) and Android (Camera2) through a clean, declarative interface. It is built on a custom C++/GPU-accelerated video pipeline and supports everything from simple photo capture to realtime frame processing with JavaScript worklets.
+
+<Columns cols={2}>
+  <Card title="Photo and video capture" icon="camera">
+    Take high-resolution photos and record videos with full control over flash, HDR, and codec settings.
+  </Card>
+  <Card title="QR and barcode scanning" icon="qrcode">
+    Scan QR codes and barcodes in realtime using the built-in code scanner.
+  </Card>
+  <Card title="Frame processors" icon="microchip">
+    Run JavaScript worklets on every camera frame for facial recognition, AI object detection, and more.
+  </Card>
+  <Card title="Multi-camera support" icon="layer-group">
+    Select physical or virtual (multi-lens) camera devices and smoothly switch between them while zooming.
+  </Card>
+  <Card title="Customizable formats" icon="sliders">
+    Configure resolution, FPS (up to 240), HDR, video stabilization, and aspect ratio per use-case.
+  </Card>
+  <Card title="Smooth zoom" icon="magnifying-glass">
+    Animate the `zoom` prop with Reanimated for fluid, native-feeling pinch-to-zoom.
+  </Card>
+  <Card title="HDR and night mode" icon="sun">
+    Enable 10-bit HDR video and multi-frame HDR photos where the hardware supports it.
+  </Card>
+  <Card title="Skia drawing" icon="paintbrush">
+    Render shapes, text, filters, and shaders on top of the camera preview using React Native Skia.
+  </Card>
+</Columns>
+
+## Minimal example
+
+```tsx
+import { Camera, useCameraDevice } from 'react-native-vision-camera'
+import { StyleSheet } from 'react-native'
+
+function App() {
+  const device = useCameraDevice('back')
+
+  if (device == null) return <NoCameraDeviceError />
+  return (
+    <Camera
+      style={StyleSheet.absoluteFill}
+      device={device}
+      isActive={true}
+    />
+  )
+}
+```
+
+## Get started
+
+<Columns cols={2}>
+  <Card title="Installation" icon="download" href="/guides/getting-started">
+    Install VisionCamera, configure permissions, and render your first `<Camera>` view.
+  </Card>
+  <Card title="Camera devices" icon="mobile" href="/guides/devices">
+    Understand physical vs virtual devices and how to select the right one for your app.
+  </Card>
+  <Card title="Camera formats" icon="film" href="/guides/formats">
+    Choose a format that matches your resolution, FPS, and HDR requirements.
+  </Card>
+  <Card title="Camera lifecycle" icon="rotate" href="/guides/lifecycle">
+    Control when the camera is active and respond to session events.
+  </Card>
+</Columns>

@@ -1,0 +1,159 @@
+---
+title: Drawing to a Frame (Skia)
+description: Use react-native-skia to draw shapes, text, and shaders directly onto Camera frames in real time.
+---
+
+## What are Skia frame processors?
+
+[Skia](https://skia.org) is a GPU-accelerated 2D graphics library — it powers Chrome, Android, Flutter, and many others. On iOS it is accelerated via Metal; on Android via OpenGL.
+
+VisionCamera provides a first-party integration with [@shopify/react-native-skia](https://github.com/Shopify/react-native-skia) through **Skia Frame Processors**. This lets you draw shapes, text, images, color shaders, and arbitrary paths directly on top of live Camera frames in real time:
+
+```ts
+const frameProcessor = useSkiaFrameProcessor((frame) => {
+  'worklet'
+  const bananas = detectBananas(frame)
+
+  frame.render()
+  for (const banana of bananas) {
+    const paint = Skia.Paint()
+    paint.setColor(Skia.Color('red'))
+    frame.drawRect(banana.rect, paint)
+  }
+}, [])
+```
+
+## Installation
+
+Skia Frame Processors require [@shopify/react-native-skia](https://github.com/Shopify/react-native-skia) 1.2.1 or higher and [react-native-reanimated](https://github.com/software-mansion/react-native-reanimated) 3.0.0 or higher.
+
+<Steps>
+  <Step title="Install the dependencies">
+    ```bash
+    npm i @shopify/react-native-skia
+    npm i react-native-reanimated
+    ```
+  </Step>
+  <Step title="Follow each library's setup instructions">
+    Both libraries require additional configuration. Follow the official installation guides for [react-native-skia](https://shopify.github.io/react-native-skia/docs/getting-started/installation) and [react-native-reanimated](https://docs.swmansion.com/react-native-reanimated/docs/fundamentals/getting-started/).
+  </Step>
+  <Step title="Rebuild your app">
+    A full native rebuild is required after installing native dependencies.
+  </Step>
+</Steps>
+
+## The `useSkiaFrameProcessor` hook
+
+A Skia Frame Processor works like any other [Frame Processor](/guides/frame-processors) — it runs synchronously for every Camera frame. Instead of receiving a plain `Frame`, however, it receives a `DrawableFrame`, which extends `Frame` with the full Skia `SkCanvas` API.
+
+```ts
+import { useSkiaFrameProcessor } from 'react-native-vision-camera'
+
+const frameProcessor = useSkiaFrameProcessor((frame) => {
+  'worklet'
+  frame.render()
+}, [])
+```
+
+<Warning>
+  You are responsible for rendering the Camera frame. **`frame.render()` must always be called**, otherwise the frame will appear as a black screen.
+</Warning>
+
+### The `DrawableFrame` interface
+
+`DrawableFrame` extends both `Frame` and Skia's `SkCanvas`, giving you access to all frame properties alongside all canvas drawing methods.
+
+<ParamField path="render" type="(paint?: SkPaint) => void">
+  Renders the Camera frame onto the canvas. Pass an optional `SkPaint` to apply filters or shaders to the frame itself.
+</ParamField>
+
+All other `SkCanvas` methods (`drawRect`, `drawCircle`, `drawText`, `drawPath`, etc.) are also available directly on `frame`.
+
+## Drawing on frames
+
+### Drawing shapes
+
+To draw a red rectangle in the center of the frame:
+
+```ts
+const frameProcessor = useSkiaFrameProcessor((frame) => {
+  'worklet'
+  frame.render()
+
+  const centerX = frame.width / 2
+  const centerY = frame.height / 2
+  const rect = Skia.XYWHRect(centerX, centerY, 150, 150)
+  const paint = Skia.Paint()
+  paint.setColor(Skia.Color('red'))
+  frame.drawRect(rect, paint)
+}, [])
+```
+
+### Applying shaders to the frame
+
+Pass a custom `SkPaint` to `frame.render()` to apply any shader or image filter to the Camera frame itself. For example, to render the frame with inverted colors using a `RuntimeEffect`:
+
+```ts
+const invertColorsFilter = Skia.RuntimeEffect.Make(`
+  uniform shader image;
+  half4 main(vec2 pos) {
+    vec4 color = image.eval(pos);
+    return vec4((1.0 - color).rgb, 1.0);
+  }
+`)!
+const shaderBuilder = Skia.RuntimeShaderBuilder(invertColorsFilter)
+const imageFilter = Skia.ImageFilter.MakeRuntimeShader(shaderBuilder, null, null)
+const paint = Skia.Paint()
+paint.setImageFilter(imageFilter)
+
+const frameProcessor = useSkiaFrameProcessor((frame) => {
+  'worklet'
+  frame.render(paint)
+}, [paint])
+```
+
+## Coordinate system
+
+Each Skia Frame Processor renders to an offscreen `SkSurface`. The Camera frame is a GPU-texture-backed `SkImage` whose coordinate system matches the frame's dimensions and orientation:
+
+- `(0, 0)` — top left
+- `(frame.width, frame.height)` — bottom right
+
+Orientation is handled automatically; the canvas is counter-rotated to ensure frames appear upright regardless of the device orientation.
+
+## `offscreenTextures`
+
+Internally, `useSkiaFrameProcessor` manages a shared value (`offscreenTextures`) that holds the rendered `SkImage` snapshots produced each frame. These are consumed by VisionCamera's onscreen Skia preview view. You do not need to manage this value manually when using `useSkiaFrameProcessor`.
+
+If you use `createSkiaFrameProcessor` directly (the lower-level API), you must provide the `offscreenTextures` shared value yourself:
+
+```ts
+const surfaceHolder = Worklets.createSharedValue({})
+const offscreenTextures = Worklets.createSharedValue([])
+
+const frameProcessor = createSkiaFrameProcessor(
+  (frame) => {
+    'worklet'
+    frame.render()
+  },
+  surfaceHolder,
+  offscreenTextures,
+  previewOrientation,
+)
+```
+
+## Performance
+
+Skia Frame Processors are GPU-accelerated via Metal (iOS) and OpenGL (Android). VisionCamera streams frames as GPU-backed textures, so no CPU copy is required until you explicitly call `toArrayBuffer()`.
+
+A Skia Frame Processor can render at up to **500 FPS**, depending on the complexity of your drawing code.
+
+<Tip>
+  Keep draw calls minimal. Creating `SkPaint` objects and calling `Skia.Color()` inside the hot path is fine — Skia is optimized for this. However, avoid creating large `SkImage` or `SkBitmap` objects per frame.
+</Tip>
+
+## Preview-only limitation
+
+<Info>
+  Skia Frame Processors are currently **preview-only**. Content drawn onto the frame is visible in the live preview but will **not** appear in captured photos, snapshots, or recorded videos.
+</Info>

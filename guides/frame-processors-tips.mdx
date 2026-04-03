@@ -1,0 +1,81 @@
+---
+title: Frame Processors Tips
+description: Performance best practices, memory guidance, and ESLint configuration for Frame Processors.
+---
+
+## Avoiding frame drops
+
+Frame Processors are called **synchronously** for every frame. If your Frame Processor has not finished executing when the next frame arrives, that frame is dropped.
+
+| Frame rate | Time budget |
+|------------|-------------|
+| 30 FPS     | ~33ms       |
+| 60 FPS     | ~16ms       |
+
+General tips to avoid frame drops:
+
+- Use [`runAsync`](/guides/frame-processors-interacting#running-asynchronously-with-runasync) for work that doesn't need to block the pipeline (e.g. uploading frames, running heavy ML models)
+- Use [`runAtTargetFps`](/guides/frame-processors-interacting#throttling-with-runattargetfps) when you don't need to process every frame (e.g. brightness checks, periodic scans)
+- Use Shared Values (`useSharedValue`) instead of React state (`useState`) when sharing results with the UI — this avoids re-renders and bridge traffic
+- Prefer native Frame Processor Plugins over pure JavaScript logic for any computation-heavy work
+
+### FPS graph
+
+Enable the FPS graph to visually profile your Frame Processor's performance over time:
+
+```tsx
+<Camera {...props} enableFpsGraph={true} />
+```
+
+The graph shows you whether the Camera is running at its target frame rate. If it consistently drops below the target, your Frame Processor is taking too long.
+
+## Fast Frame Processor Plugins
+
+When using native Frame Processor Plugins, make sure they are optimized for real-time Camera use cases:
+
+- **Prefer `yuv` over `rgb`** — `yuv` is more efficient in both memory and processing. See [Pixel Formats](/guides/pixel-formats).
+- **Use native frame types** — Pass `CMSampleBuffer` (iOS) or `Image`/`HardwareBuffer` (Android) directly to the plugin instead of calling `frame.toArrayBuffer()`. The latter involves a GPU-to-CPU copy.
+- **Use `uint8` instead of `float`** — If your plugin must work with raw bytes, `uint8` buffers are significantly faster to allocate and copy than `float` buffers.
+- **Enable GPU acceleration** — For TensorFlow models, use the CoreML or Metal GPU delegates on iOS. On Android, use the GPU delegate.
+- **Use vector acceleration for resizing** — Prefer GPU or CPU vector acceleration (e.g. Accelerate/vImage on iOS, or RenderScript on Android) over naive loop-based resizing.
+
+## Technical details
+
+### Frame Processors
+
+Frame Processors are JavaScript functions that are _workletized_ using [react-native-worklets-core](https://github.com/margelo/react-native-worklets-core). They run on a parallel camera thread inside a dedicated JavaScript Runtime ("VisionCamera JS-Runtime") and are invoked synchronously via JSI — no bridge involved.
+
+In benchmarks, a no-op Frame Processor can run more than **1000 times per second**.
+
+### Frame Processor Plugins
+
+Frame Processor Plugins are native functions (written in Objective-C, Swift, C++, Java, or Kotlin) injected directly into the VisionCamera JS-Runtime. They are called synchronously from worklets via JSI without any bridge overhead. Examples include barcode scanning, face detection, image labeling, and text recognition.
+
+### The `Frame` object
+
+The `Frame` passed to a Frame Processor is a JSI `HostObject` that wraps the native C++ GPU buffer (~12 MB at 4K in YUV). It exposes properties such as `width`, `height`, `bytesPerRow`, `pixelFormat`, `isMirrored`, and `timestamp` synchronously. You can pass `Frame` objects between JS functions, and to and from native Frame Processor Plugins.
+
+Calling `frame.toArrayBuffer()` copies the GPU buffer to the CPU. At 4K resolution, with a Frame Processor running at 60 FPS, roughly **700 MB/s** of frame data flow through the pipeline.
+
+## Memory considerations
+
+- Frames are allocated on the GPU and are only valid for the duration of the Frame Processor call (or a `runAsync` operation). Never store a reference to a `Frame` outside of those scopes.
+- Avoid allocating large objects (e.g. `ArrayBuffer`, typed arrays) on every frame in hot paths. Reuse allocations where possible.
+- When using `frame.toArrayBuffer()`, prefer processing in small chunks or delegate to a native plugin to avoid GC pressure from large heap allocations.
+
+## ESLint `react-hooks` plugin
+
+If you use the [react-hooks ESLint plugin](https://www.npmjs.com/package/eslint-plugin-react-hooks), add `useFrameProcessor` and `useSkiaFrameProcessor` to the `additionalHooks` list so their dependency arrays are checked correctly. See the [advanced configuration](https://www.npmjs.com/package/eslint-plugin-react-hooks#advanced-configuration) section for details:
+
+```json
+{
+  "rules": {
+    "react-hooks/exhaustive-deps": [
+      "warn",
+      {
+        "additionalHooks": "(useFrameProcessor|useSkiaFrameProcessor)"
+      }
+    ]
+  }
+}
+```

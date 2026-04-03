@@ -1,0 +1,203 @@
+---
+title: "Zooming"
+description: "Control the camera zoom level, implement pinch-to-zoom with Reanimated, and understand the logarithmic zoom scale."
+---
+
+The `<Camera>` component accepts a `zoom` prop that sets the current zoom level. You can animate this value to implement smooth zoom gestures.
+
+## Built-in zoom gesture
+
+For a zero-configuration pinch-to-zoom, set `enableZoomGesture={true}`:
+
+```tsx
+<Camera
+  device={device}
+  isActive={true}
+  enableZoomGesture={true}
+/>
+```
+
+If you need custom gesture logic — for example a Snapchat-style slide-up-to-zoom while recording — read on to implement it manually.
+
+## Min, neutral, and max zoom
+
+Every `CameraDevice` exposes three zoom reference values:
+
+| Property | Description |
+|---|---|
+| `device.minZoom` | Always `1`. The widest field of view. |
+| `device.neutralZoom` | The "default" zoom. Usually `1`, but can be higher on devices with an ultra-wide (fish-eye) camera. |
+| `device.maxZoom` | The highest zoom the device supports. Can be as large as `128`. |
+
+Start at `device.neutralZoom` and let users zoom out to the ultra-wide camera on demand:
+
+```ts
+const device = useCameraDevice('back')
+
+// Use neutralZoom as the starting point
+const zoom = useSharedValue(device.neutralZoom)
+```
+
+<Tip>
+  Clamp user-driven zoom to a realistic maximum (e.g. `16`) rather than `device.maxZoom`. Very high zoom values produce extremely noisy, low-quality images on most hardware.
+</Tip>
+
+## Logarithmic zoom scale
+
+The `zoom` prop uses a **logarithmic scale** — the same scale that `minZoom`, `neutralZoom`, and `maxZoom` are expressed in. This means that a linear increase in `zoom` from `1` to `2` appears as a much larger visual jump than an increase from `10` to `11`.
+
+If your gesture produces a linear value (e.g. a slider from 0 to 1), raise it exponentially before passing it to `zoom` to produce a more natural feel:
+
+```ts
+// linearValue is 0..1 from a slider
+zoom.value = Math.pow(linearValue, 2)
+```
+
+Conversely, for pinch gestures the scale factor from the gesture handler already behaves close to logarithmically, so you can map it directly with clamping.
+
+## Pinch-to-zoom with Reanimated
+
+The recommended approach for custom zoom gestures is to use [react-native-reanimated](https://docs.swmansion.com/react-native-reanimated/) together with [react-native-gesture-handler](https://docs.swmansion.com/react-native-gesture-handler/).
+
+<Steps>
+  <Step title="Install dependencies">
+    <CodeGroup>
+      ```bash npm
+      npm install react-native-reanimated react-native-gesture-handler
+      ```
+      ```bash yarn
+      yarn add react-native-reanimated react-native-gesture-handler
+      ```
+    </CodeGroup>
+  </Step>
+  <Step title="Create an animated Camera component">
+    Wrap `Camera` with `Reanimated.createAnimatedComponent` and whitelist the `zoom` prop so Reanimated can drive it directly on the native thread:
+
+    ```ts
+    import Reanimated from 'react-native-reanimated'
+    import { Camera } from 'react-native-vision-camera'
+
+    Reanimated.addWhitelistedNativeProps({ zoom: true })
+    const ReanimatedCamera = Reanimated.createAnimatedComponent(Camera)
+    ```
+  </Step>
+  <Step title="Set up the shared value and animated props">
+    ```tsx
+    import { useSharedValue, useAnimatedProps } from 'react-native-reanimated'
+    import type { CameraProps } from 'react-native-vision-camera'
+
+    const zoom = useSharedValue(device.neutralZoom)
+
+    const animatedProps = useAnimatedProps<CameraProps>(
+      () => ({ zoom: zoom.value }),
+      [zoom]
+    )
+    ```
+  </Step>
+  <Step title="Build the pinch gesture">
+    Use `Gesture.Pinch()` from Gesture Handler. Store the zoom at gesture start in a separate shared value so that each new pinch begins from the current zoom level:
+
+    ```ts
+    import { Gesture } from 'react-native-gesture-handler'
+    import { interpolate, Extrapolation } from 'react-native-reanimated'
+
+    const zoomOffset = useSharedValue(0)
+
+    const gesture = Gesture.Pinch()
+      .onBegin(() => {
+        zoomOffset.value = zoom.value
+      })
+      .onUpdate((event) => {
+        const z = zoomOffset.value * event.scale
+        zoom.value = interpolate(
+          z,
+          [1, 10],
+          [device.minZoom, device.maxZoom],
+          Extrapolation.CLAMP,
+        )
+      })
+    ```
+  </Step>
+  <Step title="Render the animated camera inside a GestureDetector">
+    ```tsx
+    import { GestureDetector } from 'react-native-gesture-handler'
+    import { StyleSheet } from 'react-native'
+
+    return (
+      <GestureDetector gesture={gesture}>
+        <ReanimatedCamera
+          style={StyleSheet.absoluteFill}
+          device={device}
+          isActive={true}
+          animatedProps={animatedProps}
+        />
+      </GestureDetector>
+    )
+    ```
+  </Step>
+</Steps>
+
+## Full example
+
+```tsx
+import { useRef } from 'react'
+import { StyleSheet } from 'react-native'
+import { Camera, useCameraDevice, CameraProps } from 'react-native-vision-camera'
+import Reanimated, {
+  useAnimatedProps,
+  useSharedValue,
+  interpolate,
+  Extrapolation,
+} from 'react-native-reanimated'
+import { Gesture, GestureDetector } from 'react-native-gesture-handler'
+
+Reanimated.addWhitelistedNativeProps({ zoom: true })
+const ReanimatedCamera = Reanimated.createAnimatedComponent(Camera)
+
+export function App() {
+  const device = useCameraDevice('back')
+  const zoom = useSharedValue(device?.neutralZoom ?? 1)
+  const zoomOffset = useSharedValue(0)
+
+  const gesture = Gesture.Pinch()
+    .onBegin(() => {
+      zoomOffset.value = zoom.value
+    })
+    .onUpdate((event) => {
+      const z = zoomOffset.value * event.scale
+      zoom.value = interpolate(
+        z,
+        [1, 10],
+        [device?.minZoom ?? 1, device?.maxZoom ?? 16],
+        Extrapolation.CLAMP,
+      )
+    })
+
+  const animatedProps = useAnimatedProps<CameraProps>(
+    () => ({ zoom: zoom.value }),
+    [zoom]
+  )
+
+  if (device == null) return null
+
+  return (
+    <GestureDetector gesture={gesture}>
+      <ReanimatedCamera
+        style={StyleSheet.absoluteFill}
+        device={device}
+        isActive={true}
+        animatedProps={animatedProps}
+      />
+    </GestureDetector>
+  )
+}
+```
+
+<CardGroup cols={2}>
+  <Card title="Focusing" icon="crosshairs" href="/guides/focusing">
+    Tap to focus the camera to a specific point on screen.
+  </Card>
+  <Card title="Camera formats" icon="sliders" href="/guides/formats">
+    Select resolution, FPS, and enable HDR or stabilization.
+  </Card>
+</CardGroup>

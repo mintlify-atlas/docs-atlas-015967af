@@ -1,0 +1,151 @@
+---
+title: "useCodeScanner"
+description: "Hook to create a memoized code scanner configuration for QR codes and barcodes using platform-native APIs."
+---
+
+```ts
+import { useCodeScanner } from 'react-native-vision-camera'
+```
+
+## Signature
+
+```ts
+useCodeScanner(config: CodeScanner): CodeScanner
+```
+
+`useCodeScanner` memoizes a `CodeScanner` configuration object so that passing it to `<Camera codeScanner={...} />` does not trigger a camera session rebuild on every render. The `onCodeScanned` callback is always kept up to date via a ref, so you do not need to list it in any dependency array.
+
+---
+
+## Parameters
+
+<ParamField body="config" type="CodeScanner" required>
+  The scanner configuration.
+
+  <Expandable title="CodeScanner">
+    <ParamField body="codeTypes" type="CodeType[]" required>
+      The code types you want to scan for. Only pass the types you actually need — enabling unnecessary types may reduce scanning performance.
+
+      Supported values:
+
+      | Value | Description |
+      |---|---|
+      | `'qr'` | QR Code |
+      | `'aztec'` | Aztec Code |
+      | `'data-matrix'` | Data Matrix |
+      | `'pdf-417'` | PDF 417 |
+      | `'code-128'` | Code 128 |
+      | `'code-39'` | Code 39 |
+      | `'code-93'` | Code 93 |
+      | `'codabar'` | Codabar |
+      | `'ean-13'` | EAN-13 |
+      | `'ean-8'` | EAN-8 |
+      | `'itf'` | ITF (Interleaved 2 of 5) |
+      | `'itf-14'` | ITF-14 |
+      | `'upc-a'` | UPC-A |
+      | `'upc-e'` | UPC-E |
+      | `'gs1-data-bar'` | GS1 DataBar |
+      | `'gs1-data-bar-limited'` | GS1 DataBar Limited |
+      | `'gs1-data-bar-expanded'` | GS1 DataBar Expanded |
+    </ParamField>
+    <ParamField body="onCodeScanned" type="(codes: Code[], frame: CodeScannerFrame) => void" required>
+      Called whenever the set of detected codes changes. May be called with an empty array if previously detected codes are no longer visible.
+
+      <Expandable title="Code">
+        <ParamField body="type" type='CodeType | "unknown"'>
+          The detected code type.
+        </ParamField>
+        <ParamField body="value" type="string" optional>
+          The decoded string value of the code. May be `undefined` if the code cannot be decoded.
+        </ParamField>
+        <ParamField body="frame" type="{ x: number; y: number; width: number; height: number }" optional>
+          The bounding box of the code relative to the Camera Preview, in density-independent pixels (dp).
+        </ParamField>
+        <ParamField body="corners" type="Point[]" optional>
+          The locations of each corner of the code relative to the Camera Preview, in dp.
+        </ParamField>
+      </Expandable>
+
+      <Expandable title="CodeScannerFrame">
+        <ParamField body="width" type="number">
+          The full width of the scanning area in pixels (e.g. `1280` or `1920`).
+        </ParamField>
+        <ParamField body="height" type="number">
+          The full height of the scanning area in pixels (e.g. `720` or `1080`).
+        </ParamField>
+      </Expandable>
+    </ParamField>
+    <ParamField body="regionOfInterest" type="{ x: number; y: number; width: number; height: number }" optional>
+      Crops the scanner's active area to a specific region. Codes outside this region are ignored. iOS only.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+---
+
+## Return Value
+
+<ResponseField name="codeScanner" type="CodeScanner">
+  A memoized `CodeScanner` object. Pass this directly to the `<Camera codeScanner={...} />` prop.
+</ResponseField>
+
+---
+
+## Memoization Behavior
+
+- The returned `CodeScanner` object maintains a stable identity as long as `codeTypes` and `regionOfInterest` remain the same (compared via `JSON.stringify`).
+- The `onCodeScanned` callback is wrapped in a ref internally, so updating the callback between renders does **not** cause the camera session to rebuild.
+
+---
+
+## Example
+
+```tsx
+import { Camera, useCameraDevice, useCodeScanner } from 'react-native-vision-camera'
+import { StyleSheet, Alert } from 'react-native'
+
+function QRScanner() {
+  const device = useCameraDevice('back')
+
+  const codeScanner = useCodeScanner({
+    codeTypes: ['qr', 'ean-13'],
+    onCodeScanned: (codes, frame) => {
+      console.log(`Scan area: ${frame.width}x${frame.height}`)
+      for (const code of codes) {
+        console.log(`Scanned ${code.type}: ${code.value}`)
+      }
+    },
+  })
+
+  if (device == null) return null
+
+  return (
+    <Camera
+      style={StyleSheet.absoluteFill}
+      device={device}
+      isActive={true}
+      codeScanner={codeScanner}
+    />
+  )
+}
+```
+
+### With region of interest (iOS)
+
+```tsx
+const codeScanner = useCodeScanner({
+  codeTypes: ['qr'],
+  onCodeScanned: (codes) => {
+    if (codes.length > 0) Alert.alert('Found QR', codes[0].value ?? '')
+  },
+  regionOfInterest: { x: 0.1, y: 0.3, width: 0.8, height: 0.4 },
+})
+```
+
+---
+
+## Notes
+
+- Code scanning runs entirely on platform-native APIs (AVFoundation on iOS, ML Kit on Android). It does **not** require a Frame Processor.
+- If you need to scan codes and run a Frame Processor simultaneously, use a Frame Processor plugin instead of `codeScanner`.
+- The `<Camera>` component must have `isActive={true}` for scanning to work.

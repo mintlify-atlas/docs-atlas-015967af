@@ -1,0 +1,154 @@
+---
+title: "useCameraPermission / useMicrophonePermission"
+description: "Hooks for checking and requesting camera, microphone, and location permissions."
+---
+
+```ts
+import {
+  useCameraPermission,
+  useMicrophonePermission,
+} from 'react-native-vision-camera'
+```
+
+VisionCamera provides three permission hooks that each return the same `PermissionState` shape. Each hook re-evaluates the permission status whenever the app returns to the foreground (in case the user changed the permission in the system Settings app).
+
+---
+
+## Hooks
+
+### useCameraPermission
+
+```ts
+useCameraPermission(): PermissionState
+```
+
+Returns whether the user has granted permission to use the camera. Without camera permission, the `<Camera>` component cannot be used.
+
+---
+
+### useMicrophonePermission
+
+```ts
+useMicrophonePermission(): PermissionState
+```
+
+Returns whether the user has granted permission to use the microphone. Without microphone permission, you can still use `<Camera>` but cannot record audio (`audio={true}`).
+
+---
+
+### useLocationPermission
+
+```ts
+useLocationPermission(): PermissionState
+```
+
+Returns whether the user has granted permission to access location. Without location permission, you can still use `<Camera>` but cannot capture photos or videos with GPS EXIF tags (`enableLocation={true}`).
+
+---
+
+## Return Value
+
+All three hooks return a `PermissionState` object:
+
+<ResponseField name="hasPermission" type="boolean">
+  Whether the specified permission has been explicitly granted. Starts as `false` on first render; call `requestPermission()` to prompt the user.
+</ResponseField>
+
+<ResponseField name="requestPermission" type="() => Promise<boolean>">
+  Prompts the user for the permission and returns `true` if granted, `false` otherwise. If the user has previously denied the permission, the system dialog will not appear and `false` is returned.
+</ResponseField>
+
+---
+
+## CameraPermissionStatus
+
+The underlying permission status exposed by the static `Camera` methods can be one of:
+
+| Value | Description |
+|---|---|
+| `'granted'` | The user has explicitly granted permission. |
+| `'not-determined'` | The user hasn't been asked yet. |
+| `'denied'` | The user has explicitly denied permission. The dialog will not appear again; direct the user to Settings. |
+| `'restricted'` | Permission is restricted by device policy (e.g. parental controls). The user cannot change this. |
+
+---
+
+## Usage Pattern
+
+The recommended pattern is: check → request → handle result.
+
+```tsx
+import { useCameraPermission } from 'react-native-vision-camera'
+
+function App() {
+  const { hasPermission, requestPermission } = useCameraPermission()
+
+  if (!hasPermission) {
+    return (
+      <View>
+        <Text>Camera permission is required.</Text>
+        <Button title="Grant Permission" onPress={requestPermission} />
+      </View>
+    )
+  }
+
+  return <Camera device={device} isActive={true} style={StyleSheet.absoluteFill} />
+}
+```
+
+---
+
+## Complete Example
+
+```tsx
+import { useEffect } from 'react'
+import { Alert } from 'react-native'
+import {
+  Camera,
+  useCameraDevice,
+  useCameraPermission,
+  useMicrophonePermission,
+} from 'react-native-vision-camera'
+
+function VideoRecorder() {
+  const device = useCameraDevice('back')
+  const { hasPermission: hasCameraPermission, requestPermission: requestCamera } =
+    useCameraPermission()
+  const { hasPermission: hasMicPermission, requestPermission: requestMic } =
+    useMicrophonePermission()
+
+  useEffect(() => {
+    async function setup() {
+      const cameraGranted = await requestCamera()
+      if (!cameraGranted) {
+        Alert.alert('Camera permission denied', 'Please enable it in Settings.')
+        return
+      }
+      const micGranted = await requestMic()
+      if (!micGranted) {
+        Alert.alert('Microphone permission denied', 'Audio will not be recorded.')
+      }
+    }
+    setup()
+  }, [requestCamera, requestMic])
+
+  if (!hasCameraPermission || device == null) return null
+
+  return (
+    <Camera
+      device={device}
+      isActive={true}
+      video={true}
+      audio={hasMicPermission}
+      style={StyleSheet.absoluteFill}
+    />
+  )
+}
+```
+
+---
+
+## Notes
+
+- All three hooks listen to `AppState` changes and automatically refresh the permission status when the user returns to the app from the system Settings. This means `hasPermission` will become `true` without requiring a re-mount if the user enables the permission in Settings.
+- `requestPermission()` wraps the static `Camera.requestCameraPermission()`, `Camera.requestMicrophonePermission()`, or `Camera.requestLocationPermission()` methods respectively.

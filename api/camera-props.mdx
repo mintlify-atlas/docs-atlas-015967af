@@ -1,0 +1,264 @@
+---
+title: "CameraProps"
+description: "Complete reference for all props accepted by the <Camera> component."
+---
+
+`CameraProps` extends React Native's `ViewProps`, so all standard view props such as `style`, `onLayout`, etc. are also accepted.
+
+```tsx
+import { Camera } from 'react-native-vision-camera'
+```
+
+---
+
+## Required
+
+<ParamField body="device" type="CameraDevice" required>
+  The camera device to use. Obtain a device with the `useCameraDevice` hook or `Camera.getAvailableCameraDevices()`. The camera will throw a runtime error if this value is `null`.
+</ParamField>
+
+<ParamField body="isActive" type="boolean" required>
+  Whether the Camera should actively stream video frames. Setting this to `false` is comparable to pausing a video — the camera session stays alive but stops delivering frames. Fully unmounting `<Camera>` instead will use fewer resources but takes longer to restart.
+</ParamField>
+
+---
+
+## Media Capture
+
+<ParamField body="photo" type="boolean" optional>
+  Enables photo capture via `takePhoto()`. Must be `true` to call `takePhoto()` on the ref.
+</ParamField>
+
+<ParamField body="video" type="boolean" optional>
+  Enables video recording via `startRecording()`. Must be `true` to start a recording.
+</ParamField>
+
+<ParamField body="audio" type="boolean" optional>
+  Enables audio capture during video recording. Requires microphone permission.
+</ParamField>
+
+<ParamField body="preview" type="boolean" default="true">
+  Enables the live preview stream. Preview is disabled automatically when using a Skia Frame Processor, which uses the video stream as its own preview.
+</ParamField>
+
+---
+
+## Format & Configuration
+
+<ParamField body="format" type="CameraDeviceFormat" optional>
+  Selects a specific camera format. If omitted, the best matching format is chosen automatically. The format controls the valid ranges for `fps`, `videoHdr`, `photoHdr`, `enableDepthData`, and `videoStabilizationMode`.
+</ParamField>
+
+<ParamField body="fps" type="number | [minFps: number, maxFps: number]" optional>
+  The target frames per second.
+
+  - Pass a single `number` for a fixed FPS.
+  - Pass a `[min, max]` tuple to let the camera choose a FPS within that range based on lighting conditions. Allowing a lower `minFps` can improve photo and video quality in low light.
+
+  The given `format` must support the requested FPS range.
+</ParamField>
+
+<ParamField body="videoHdr" type="boolean" optional>
+  Enables HDR video streaming via a 10-bit wide-color pixel format for the preview, video output, and frame processor. The selected `format` must have `supportsVideoHdr: true`.
+</ParamField>
+
+<ParamField body="photoHdr" type="boolean" optional>
+  Enables HDR photo capture using a double-capture routine that combines low- and high-exposure photos. On Android, `photoHdr` and `videoHdr` cannot both be enabled at the same time. The selected `format` must have `supportsPhotoHdr: true`.
+</ParamField>
+
+<ParamField body="videoStabilizationMode" type="VideoStabilizationMode" optional>
+  The video stabilization mode to apply. Must be supported by the selected `format`.
+
+  Accepted values:
+  - `'off'` — No stabilization.
+  - `'standard'` — Software-based stabilization; reduces field of view by ~10%.
+  - `'cinematic'` — More aggressive software-based stabilization.
+  - `'cinematic-extended'` — Combined software and hardware stabilization.
+  - `'auto'` — The platform picks the most appropriate mode.
+</ParamField>
+
+<ParamField body="pixelFormat" type='"yuv" | "rgb"' default='"yuv"'>
+  The pixel format of frames delivered to a Frame Processor.
+
+  - `'yuv'`: Y'CbCr 4:2:0 (NV21 on Android). Most efficient; prefer this unless your ML model requires RGB.
+  - `'rgb'`: RGBA or BGRA, 8-bit per channel. Required by some ML models such as TensorFlow Face Detection.
+</ParamField>
+
+<ParamField body="enableBufferCompression" type="boolean" optional>
+  Enables lossy buffer compression for the video pipeline, lowering memory usage. Automatically `true` when no Frame Processor is active, and `false` otherwise. iOS only.
+</ParamField>
+
+<ParamField body="photoQualityBalance" type='"speed" | "balanced" | "quality"' default='"balanced"'>
+  Controls the trade-off between capture speed and photo quality in the photo pipeline.
+</ParamField>
+
+<ParamField body="lowLightBoost" type="boolean" optional>
+  Enables low-light boost, which may throttle FPS to allow more exposure. On Android this can use a vendor-specific night-mode extension. Requires `device.supportsLowLightBoost` to be `true`.
+</ParamField>
+
+<ParamField body="videoBitRate" type='"extra-low" | "low" | "normal" | "high" | "extra-high" | number' default='"normal"'>
+  The encoding bit-rate for video files, in Mbps.
+
+  - `'extra-low'`: 40% lower than the hardware encoder recommendation.
+  - `'low'`: 20% lower.
+  - `'normal'`: The hardware encoder's recommendation.
+  - `'high'`: 20% higher.
+  - `'extra-high'`: 40% higher.
+  - A `number`: An absolute override value in Mbps.
+</ParamField>
+
+<ParamField body="enableDepthData" type="boolean" default="false">
+  Enables depth data delivery for photo capture. The selected `format` must have `supportsDepthCapture: true`.
+</ParamField>
+
+<ParamField body="enablePortraitEffectsMatteDelivery" type="boolean" default="false">
+  Prepares the photo pipeline for portrait effects matte delivery. Requires `enableDepthData: true`. iOS 12+ only.
+</ParamField>
+
+---
+
+## Code Scanner
+
+<ParamField body="codeScanner" type="CodeScanner" optional>
+  A code scanner created with `useCodeScanner`. Enables platform-native QR code and barcode detection without using a frame processor.
+
+  ```tsx
+  const codeScanner = useCodeScanner({
+    codeTypes: ['qr', 'ean-13'],
+    onCodeScanned: (codes) => {
+      console.log(`Scanned ${codes.length} codes!`)
+    },
+  })
+
+  return <Camera {...props} codeScanner={codeScanner} />
+  ```
+</ParamField>
+
+---
+
+## Frame Processor
+
+<ParamField body="frameProcessor" type="ReadonlyFrameProcessor | DrawableFrameProcessor" optional>
+  A memoized frame processor created with `useFrameProcessor` (or `useSkiaFrameProcessor`). Called on every frame the camera captures.
+
+  ```tsx
+  const frameProcessor = useFrameProcessor((frame) => {
+    'worklet'
+    const faces = scanFaces(frame)
+    console.log(`Faces: ${faces}`)
+  }, [])
+
+  return <Camera {...cameraProps} frameProcessor={frameProcessor} />
+  ```
+</ParamField>
+
+---
+
+## Visual
+
+<ParamField body="resizeMode" type='"cover" | "contain"' default='"cover"'>
+  Controls how the preview fills the view.
+
+  - `'cover'`: Maintains aspect ratio and fills the entire parent view (may crop edges).
+  - `'contain'`: Maintains aspect ratio and ensures all content is visible (may show blank bars).
+</ParamField>
+
+<ParamField body="torch" type='"off" | "on"' default='"off"'>
+  The current torch mode. The device must have a torch (`device.hasTorch`).
+</ParamField>
+
+<ParamField body="zoom" type="number" default="1.0">
+  The zoom factor, ranging from `device.minZoom` to `device.maxZoom`. It is recommended to initialize this to `device.neutralZoom`. Note that linearly increasing zoom appears logarithmic to the user.
+</ParamField>
+
+<ParamField body="enableZoomGesture" type="boolean" default="false">
+  Enables the native pinch-to-zoom gesture. Disable this if you implement a custom zoom gesture (e.g. with Reanimated).
+</ParamField>
+
+<ParamField body="exposure" type="number" optional>
+  The exposure bias, ranging from `device.minExposure` to `device.maxExposure`. The camera continues to auto-adjust exposure but premultiplies it by this value.
+</ParamField>
+
+<ParamField body="isMirrored" type="boolean" optional>
+  Whether to mirror photo, video, and snapshot output along the vertical axis. Preview is not affected. Defaults to `true` for front cameras and `false` for back cameras.
+</ParamField>
+
+<ParamField body="outputOrientation" type="OutputOrientation" default='"device"'>
+  The orientation applied to photo, snapshot, and video outputs.
+
+  - `'preview'`: Matches the preview orientation. If device rotation is locked, outputs are always in the preview's orientation.
+  - `'device'`: Matches the physical device orientation regardless of whether the screen rotation is locked.
+</ParamField>
+
+<ParamField body="androidPreviewViewType" type='"surface-view" | "texture-view"' default='"surface-view"'>
+  The Android rendering implementation for the preview.
+
+  - `'surface-view'`: Uses `SurfaceView`. More efficient and supports HDR, but cannot be masked, clipped, or rotated.
+  - `'texture-view'`: Uses `TextureView`. Less efficient and no HDR support, but supports masks, transparency, and rotations.
+</ParamField>
+
+<ParamField body="enableLocation" type="boolean" optional>
+  Adds GPS EXIF tags to captured photos and videos. Requires location permission.
+</ParamField>
+
+---
+
+## Debug
+
+<ParamField body="enableFpsGraph" type="boolean" default="false">
+  Displays a live FPS graph overlay on the Camera view. Useful for profiling your Frame Processor's performance.
+</ParamField>
+
+---
+
+## Events
+
+<ParamField body="onInitialized" type="() => void" optional>
+  Called when the camera session is successfully initialized and ready for capture. This fires each time the `device` or any output configuration changes.
+</ParamField>
+
+<ParamField body="onStarted" type="() => void" optional>
+  Called when the camera starts streaming (`isActive` becomes `true`).
+</ParamField>
+
+<ParamField body="onStopped" type="() => void" optional>
+  Called when the camera stops streaming (`isActive` becomes `false`).
+</ParamField>
+
+<ParamField body="onPreviewStarted" type="() => void" optional>
+  Called when the preview view receives its first frame. Only fires when `preview` is `true` and no Skia Frame Processor is used.
+</ParamField>
+
+<ParamField body="onPreviewStopped" type="() => void" optional>
+  Called when the preview view stops delivering frames. Only fires when `preview` is `true` and no Skia Frame Processor is used.
+</ParamField>
+
+<ParamField body="onError" type="(error: CameraRuntimeError) => void" optional>
+  Called when a runtime error occurs. If not provided, errors are logged to the console.
+</ParamField>
+
+<ParamField body="onShutter" type="(event: OnShutterEvent) => void" optional>
+  Called just before a photo or snapshot is captured. Use this to play a custom shutter sound or animate a UI flash.
+
+  <Expandable title="OnShutterEvent">
+    <ParamField body="type" type='"photo" | "snapshot"'>
+      The type of capture that triggered the shutter event.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="onOutputOrientationChanged" type="(outputOrientation: Orientation) => void" optional>
+  Called whenever the output orientation changes. This can happen even when screen rotation is locked.
+</ParamField>
+
+<ParamField body="onPreviewOrientationChanged" type="(previewOrientation: Orientation) => void" optional>
+  Called whenever the preview orientation changes, which typically happens when the screen rotates.
+</ParamField>
+
+<ParamField body="onUIRotationChanged" type="(uiRotation: number) => void" optional>
+  Called whenever the target UI rotation changes. The `uiRotation` value is the number of degrees that UI elements should be rotated to appear upright.
+</ParamField>
+
+<ParamField body="onBytesWrittenVideo" type="(bytes: number) => void" optional>
+  Called periodically during video recording with the total number of bytes written to the video file so far.
+</ParamField>

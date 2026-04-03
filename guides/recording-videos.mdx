@@ -1,0 +1,283 @@
+---
+title: "Recording videos"
+description: "Record video with configurable codec, bitrate, FPS, and audio using the Camera's startRecording API."
+sidebarTitle: "Recording videos"
+---
+
+Video recording is driven by three methods on the camera ref: `startRecording()`, `stopRecording()`, and `cancelRecording()`. Unlike `takePhoto()`, `startRecording()` is **not** async — it returns immediately and delivers the finished file through a callback.
+
+## Set up the camera ref
+
+```tsx
+import { useRef } from 'react'
+import { Camera, useCameraDevice } from 'react-native-vision-camera'
+
+function App() {
+  const camera = useRef<Camera>(null)
+  const device = useCameraDevice('back')
+
+  if (device == null) return null
+
+  return (
+    <Camera
+      ref={camera}
+      device={device}
+      isActive={true}
+      video={true}
+      audio={true}
+    />
+  )
+}
+```
+
+## Enable video and audio capture
+
+Set `video={true}` to enable the video pipeline. Set `audio={true}` to include audio — this requires the microphone permission.
+
+```tsx
+<Camera
+  ref={camera}
+  device={device}
+  isActive={true}
+  video={true}
+  audio={true}
+/>
+```
+
+<Warning>
+  `audio={true}` requires the `NSMicrophoneUsageDescription` key in `Info.plist` on iOS and the `RECORD_AUDIO` permission in `AndroidManifest.xml` on Android.
+</Warning>
+
+## Start and stop a recording
+
+Call `startRecording()` to begin. It accepts an options object with required `onRecordingFinished` and `onRecordingError` callbacks. Call `stopRecording()` to end the recording — the finished `VideoFile` is delivered through `onRecordingFinished`.
+
+```ts
+camera.current.startRecording({
+  onRecordingFinished: (video) => {
+    console.log('Recorded to:', video.path)
+    console.log('Duration:', video.duration, 's')
+  },
+  onRecordingError: (error) => {
+    console.error('Recording error:', error)
+  },
+})
+
+// Later — stop the recording
+await camera.current.stopRecording()
+```
+
+### RecordVideoOptions
+
+<ParamField path="options.onRecordingFinished" type="(video: VideoFile) => void" required>
+  Called when the recording stops and the file is ready. Receives the completed `VideoFile`.
+</ParamField>
+
+<ParamField path="options.onRecordingError" type="(error: CameraCaptureError) => void" required>
+  Called if an unexpected error occurs during recording. The recording is cancelled and the temporary file is deleted.
+</ParamField>
+
+<ParamField path="options.flash" type="'on' | 'off'">
+  Enables the torch while recording. Internally sets `torch="on"` for the duration of the recording. Only available on devices where `device.hasTorch` is `true`.
+</ParamField>
+
+<ParamField path="options.videoCodec" type="'h264' | 'h265'">
+  The video codec to encode with. Defaults to `'h264'` if not set.
+</ParamField>
+
+<ParamField path="options.fileType" type="'mov' | 'mp4'">
+  The output container format. Defaults to the platform default.
+</ParamField>
+
+<ParamField path="options.path" type="string">
+  Custom directory where the video file is saved. VisionCamera generates the filename. Defaults to the device's temporary directory.
+</ParamField>
+
+### VideoFile result
+
+`onRecordingFinished` receives a `VideoFile`:
+
+| Property | Type | Description |
+|---|---|---|
+| `path` | `string` | Absolute path to the file in the temporary directory |
+| `duration` | `number` | Duration of the recording in seconds |
+| `width` | `number` | Video width in pixels |
+| `height` | `number` | Video height in pixels |
+
+## Pause and resume
+
+Pause and resume the active recording without stopping it:
+
+```ts
+await camera.current.pauseRecording()
+
+// ... user taps resume
+await camera.current.resumeRecording()
+```
+
+## Cancel a recording
+
+Cancelling stops the recording, deletes the temporary file, and invokes `onRecordingError` with a `capture/recording-canceled` error code:
+
+```ts
+await camera.current.cancelRecording()
+```
+
+To distinguish a cancellation from a real error in your callback:
+
+```ts
+onRecordingError: (error) => {
+  if (error.code === 'capture/recording-canceled') {
+    // user canceled — not an error
+    return
+  }
+  console.error('Unexpected recording error:', error)
+}
+```
+
+## Flash (torch)
+
+Enable the torch during recording via the `flash` option. This is equivalent to setting `torch="on"` on the `<Camera>` component while the recording is active:
+
+```ts
+camera.current.startRecording({
+  flash: 'on',
+  onRecordingFinished: (video) => console.log(video),
+  onRecordingError: (error) => console.error(error),
+})
+```
+
+<Note>
+  Flash/torch during recording is only available on devices where `device.hasTorch` is `true`. Front cameras typically do not have a torch.
+</Note>
+
+## Video codec
+
+<Tabs>
+  <Tab title="H.264 (default)">
+    H.264 is widely supported by all devices, streaming platforms, and playback libraries. Use it when compatibility is the priority.
+
+    ```ts
+    camera.current.startRecording({
+      videoCodec: 'h264',
+      onRecordingFinished: (video) => console.log(video),
+      onRecordingError: (error) => console.error(error),
+    })
+    ```
+  </Tab>
+  <Tab title="H.265 / HEVC">
+    H.265 (HEVC) produces files up to **50% smaller** than H.264 at the same visual quality. Use it when your backend and playback target support HEVC.
+
+    ```ts
+    camera.current.startRecording({
+      videoCodec: 'h265',
+      onRecordingFinished: (video) => console.log(video),
+      onRecordingError: (error) => console.error(error),
+    })
+    ```
+
+    <Tip>
+      If the device does not support `h265`, VisionCamera automatically falls back to `h264`.
+    </Tip>
+  </Tab>
+</Tabs>
+
+## Video bit rate
+
+The `videoBitRate` prop controls the encoder's target bit rate. A lower bit rate means smaller files at the cost of quality; a higher bit rate means better quality at the cost of file size.
+
+### Preset values
+
+```tsx
+{/* 40% lower than hardware recommendation */}
+<Camera {...props} videoBitRate="extra-low" />
+
+{/* 20% lower */}
+<Camera {...props} videoBitRate="low" />
+
+{/* Hardware default (recommended) */}
+<Camera {...props} videoBitRate="normal" />
+
+{/* 20% higher */}
+<Camera {...props} videoBitRate="high" />
+
+{/* 40% higher */}
+<Camera {...props} videoBitRate="extra-high" />
+```
+
+### Custom bit rate
+
+Pass a number (in **Mbps**) for a fully custom bit rate. Use the recommended base rates as a starting point, then adjust for FPS, HDR, and codec:
+
+| Resolution | Base bit rate |
+|---|---|
+| 480p | 2 Mbps |
+| 720p | 5 Mbps |
+| 1080p | 10 Mbps |
+| 4K | 30 Mbps |
+| 8K | 100 Mbps |
+
+```ts
+let bitRate = 10 // 1080p base
+bitRate = (bitRate / 30) * fps       // adjust for frame rate
+if (videoHdr) bitRate *= 1.2         // 10-bit HDR
+if (codec === 'h265') bitRate *= 0.8 // H.265 efficiency gain
+bitRate *= 0.75                      // your custom factor
+```
+
+```tsx
+<Camera {...props} videoBitRate={bitRate} />
+```
+
+## Frame rate (FPS)
+
+The output video runs at the `fps` prop value. Make sure the selected format supports the target frame rate.
+
+```tsx
+<Camera {...props} fps={60} />
+```
+
+You can also pass a `[minFps, maxFps]` range to let the camera adapt to lighting conditions:
+
+```tsx
+<Camera {...props} fps={[24, 60]} />
+```
+
+## Monitor bytes written
+
+Use `onBytesWrittenVideo` to track file size in real time while recording:
+
+```tsx
+<Camera
+  {...props}
+  onBytesWrittenVideo={(bytes) => {
+    console.log(`Written: ${(bytes / 1_000_000).toFixed(1)} MB`)
+  }}
+/>
+```
+
+## Saving to the camera roll
+
+Videos are written to a temporary directory. Save them permanently with [react-native-cameraroll](https://github.com/react-native-cameraroll/react-native-cameraroll):
+
+```ts
+import { CameraRoll } from '@react-native-camera-roll/camera-roll'
+
+camera.current.startRecording({
+  onRecordingFinished: async (video) => {
+    await CameraRoll.save(`file://${video.path}`, {
+      type: 'video',
+    })
+  },
+  onRecordingError: (error) => console.error(error),
+})
+```
+
+<CardGroup cols={2}>
+  <Card title="QR/Barcode scanning" icon="qrcode" href="/guides/code-scanning">
+    Scan codes in the camera stream without capturing media.
+  </Card>
+  <Card title="Camera formats" icon="sliders" href="/guides/formats">
+    Configure resolution, FPS, HDR, and stabilization.
+  </Card>
+</CardGroup>

@@ -1,0 +1,163 @@
+---
+title: GPS location tags
+description: Automatically embed GPS coordinates into captured photos and videos using EXIF and container-level location tags.
+---
+
+## What are GPS location tags?
+
+GPS location tags are geographic coordinates stored inside media files — in EXIF tags for photos and in QuickTime/MP4 container tags for videos. Apps like Apple Photos and Google Photos use these tags to place media on a map and organize it by location.
+
+VisionCamera can stream location updates from the device and automatically embed them in every photo and video you capture.
+
+<Warning>
+Location is a privacy-sensitive API. Apple's review team may reject apps that include location code but do not actually use it. If you do not use location tagging, disable the location APIs at build time (see below).
+</Warning>
+
+## Step 1: Configure permissions
+
+Before requesting location access at runtime, declare the permission in your app's manifest files.
+
+<Tabs>
+  <Tab title="React Native">
+    **iOS** — Add the following key to your `Info.plist`:
+
+    ```xml
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>$(PRODUCT_NAME) needs access to your location.</string>
+    ```
+
+    **Android** — Add the following permission to your `AndroidManifest.xml` inside the `<manifest>` tag:
+
+    ```xml
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    ```
+  </Tab>
+  <Tab title="Expo">
+    Add the `enableLocation` option to the VisionCamera plugin in your Expo config (`app.json`, `app.config.json`, or `app.config.js`):
+
+    ```json
+    {
+      "name": "my app",
+      "plugins": [
+        [
+          "react-native-vision-camera",
+          {
+            "enableLocation": true,
+            "locationPermissionText": "[my app] needs your location."
+          }
+        ]
+      ]
+    }
+    ```
+
+    Then rebuild your native project:
+
+    ```bash
+    npx expo prebuild
+    ```
+
+    To distribute a new binary with the changes:
+
+    ```bash
+    eas build
+    ```
+  </Tab>
+</Tabs>
+
+## Step 2: Request location permission at runtime
+
+After declaring the permission, prompt the user to grant it before enabling `enableLocation`.
+
+<Tabs>
+  <Tab title="Hooks API">
+    Use the `useLocationPermission` hook:
+
+    ```tsx
+    import { useLocationPermission } from 'react-native-vision-camera'
+
+    const { hasPermission, requestPermission } = useLocationPermission()
+
+    if (!hasPermission) {
+      return <Button title="Grant location access" onPress={requestPermission} />
+    }
+    ```
+  </Tab>
+  <Tab title="Imperative API">
+    Check the current status, then request if needed:
+
+    ```ts
+    import { Camera } from 'react-native-vision-camera'
+
+    const status = Camera.getLocationPermissionStatus()
+    // 'granted' | 'not-determined' | 'denied' | 'restricted'
+
+    if (status !== 'granted') {
+      const result = await Camera.requestLocationPermission()
+      // 'granted' | 'denied'
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Step 3: Enable location tagging
+
+Set `enableLocation` on the `<Camera>` component. Once enabled, all subsequent `takePhoto()` and `startRecording()` calls will include GPS coordinates in the output file.
+
+```tsx
+<Camera
+  device={device}
+  isActive={true}
+  photo={true}
+  video={true}
+  enableLocation={true}
+/>
+```
+
+<Note>
+`enableLocation` will throw a `system/location-not-enabled` error if the location APIs were excluded from the build. Make sure you have enabled them at build time (see below) before setting this prop to `true`.
+</Note>
+
+## Controlling location APIs at build time
+
+Location APIs are compiled into the app binary by default. If you do not use location tagging, exclude them to avoid App Store rejection.
+
+<Tabs>
+  <Tab title="React Native — iOS">
+    In your `Podfile`, set the `VCEnableLocation` flag before the `use_native_modules!` call:
+
+    ```ruby
+    $VCEnableLocation = false
+    ```
+
+    Then run `pod install` and rebuild.
+  </Tab>
+  <Tab title="React Native — Android">
+    In your `gradle.properties`, add:
+
+    ```groovy
+    VisionCamera_enableLocation=false
+    ```
+
+    Then rebuild.
+  </Tab>
+  <Tab title="Expo">
+    In your Expo config, set `enableLocation` to `false`:
+
+    ```json
+    {
+      "plugins": [
+        [
+          "react-native-vision-camera",
+          {
+            "enableLocation": false
+          }
+        ]
+      ]
+    }
+    ```
+
+    Rebuild with `npx expo prebuild` followed by `eas build`.
+  </Tab>
+</Tabs>
+
+Setting the flag to `false` removes all location-related code from the compiled binary. Any attempt to call `Camera.getLocationPermissionStatus()`, `Camera.requestLocationPermission()`, or set `enableLocation={true}` will throw a `system/location-not-enabled` error.

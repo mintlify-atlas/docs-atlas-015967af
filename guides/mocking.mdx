@@ -1,0 +1,247 @@
+---
+title: "Mocking"
+description: "Mock VisionCamera in Jest unit tests and Detox end-to-end tests so you can develop and test camera features without physical hardware."
+---
+
+VisionCamera relies on native camera hardware, which means it cannot run in a Node.js Jest environment or in emulators/simulators that lack camera support. You can mock the library to keep your tests fast and deterministic.
+
+<Note>
+  Always validate real camera behavior on a physical device. Mocks confirm that your app logic works — they do not test the underlying camera pipeline.
+</Note>
+
+## Jest unit testing
+
+### Mock the module
+
+The simplest approach for Jest is to mock the entire `react-native-vision-camera` module in your test setup file.
+
+```ts
+// __mocks__/react-native-vision-camera.ts
+
+import React from 'react'
+
+export const Camera = React.forwardRef((_props: unknown, _ref: unknown) => null)
+
+export const useCameraDevice = jest.fn(() => ({
+  id: 'mock-back-camera',
+  position: 'back',
+  name: 'Mock Back Camera',
+  hasFlash: true,
+  hasTorch: true,
+  isMultiCam: false,
+  minZoom: 1,
+  maxZoom: 8,
+  neutralZoom: 1,
+  formats: [],
+  supportsLowLightBoost: false,
+  supportsFocus: true,
+  physicalDevices: ['wide-angle-camera'],
+}))
+
+export const useCameraPermission = jest.fn(() => ({
+  hasPermission: true,
+  requestPermission: jest.fn().mockResolvedValue(true),
+}))
+
+export const useMicrophonePermission = jest.fn(() => ({
+  hasPermission: true,
+  requestPermission: jest.fn().mockResolvedValue(true),
+}))
+
+export const useCodeScanner = jest.fn((config: unknown) => config)
+
+export const useFrameProcessor = jest.fn()
+```
+
+Register the mock in your Jest config:
+
+```json
+// jest.config.json
+{
+  "moduleNameMapper": {
+    "react-native-vision-camera": "<rootDir>/__mocks__/react-native-vision-camera.ts"
+  }
+}
+```
+
+Or add it to the `setupFilesAfterEach` array and call `jest.mock` directly:
+
+```ts
+// jest.setup.ts
+jest.mock('react-native-vision-camera', () => ({
+  Camera: require('react').forwardRef(() => null),
+  useCameraDevice: jest.fn(() => ({ id: 'back', position: 'back' })),
+  useCameraPermission: jest.fn(() => ({
+    hasPermission: true,
+    requestPermission: jest.fn().mockResolvedValue(true),
+  })),
+}))
+```
+
+### Test a component that uses Camera
+
+```tsx
+// CameraScreen.test.tsx
+import React from 'react'
+import { render } from '@testing-library/react-native'
+import { useCameraDevice, useCameraPermission } from 'react-native-vision-camera'
+import CameraScreen from './CameraScreen'
+
+jest.mock('react-native-vision-camera')
+
+describe('CameraScreen', () => {
+  it('renders the capture button when permission is granted', () => {
+    ;(useCameraPermission as jest.Mock).mockReturnValue({
+      hasPermission: true,
+      requestPermission: jest.fn(),
+    })
+    ;(useCameraDevice as jest.Mock).mockReturnValue({ id: 'back', position: 'back' })
+
+    const { getByTestId } = render(<CameraScreen />)
+    expect(getByTestId('capture-button')).toBeTruthy()
+  })
+
+  it('renders a permission prompt when permission is denied', () => {
+    ;(useCameraPermission as jest.Mock).mockReturnValue({
+      hasPermission: false,
+      requestPermission: jest.fn(),
+    })
+
+    const { getByText } = render(<CameraScreen />)
+    expect(getByText('Allow Camera Access')).toBeTruthy()
+  })
+})
+```
+
+## Detox end-to-end testing
+
+For Detox (or similar E2E frameworks), you can use Metro's `RN_SRC_EXT` mechanism to swap modules at bundle time without changing your application source.
+
+### Step 1: Configure Metro
+
+Allow the Metro bundler to pick up alternative source file extensions via the `RN_SRC_EXT` environment variable:
+
+```js
+// metro.config.js
+const { getDefaultConfig } = require('metro-config')
+const { resolver: defaultResolver } = getDefaultConfig.getDefaultValues()
+
+module.exports = {
+  resolver: {
+    ...defaultResolver,
+    sourceExts: [
+      ...(process.env.RN_SRC_EXT ? process.env.RN_SRC_EXT.split(',') : []),
+      ...defaultResolver.sourceExts,
+    ],
+  },
+}
+```
+
+### Step 2: Create a proxy module
+
+Create a folder (e.g. `vision-camera/`) anywhere in your project and add two files:
+
+<CodeGroup>
+
+```js vision-camera/vision-camera.js
+// Production: re-exports the real library
+import { Camera } from 'react-native-vision-camera'
+
+export const VisionCamera = Camera
+```
+
+```js vision-camera/vision-camera.e2e.js
+// E2E mock: simulates camera behavior without hardware
+import React from 'react'
+import RNFS, { writeFile } from 'react-native-fs'
+
+console.log('[DETOX] Using mocked react-native-vision-camera')
+
+export class VisionCamera extends React.PureComponent {
+  static getAvailableCameraDevices() {
+    return [{ position: 'back' }]
+  }
+
+  static async getCameraPermissionStatus() {
+    return 'granted'
+  }
+
+  static async requestCameraPermission() {
+    return 'granted'
+  }
+
+  async takePhoto() {
+    const writePath = `${RNFS.DocumentDirectoryPath}/simulated_camera_photo.png`
+    const imageDataBase64 = 'iVBORw0KGgo=' // minimal valid base64 PNG stub
+    await writeFile(writePath, imageDataBase64, 'base64')
+    return { path: writePath }
+  }
+
+  render() {
+    return null
+  }
+}
+```
+
+</CodeGroup>
+
+### Step 3: Import from the proxy
+
+Replace direct imports from `react-native-vision-camera` with your proxy module in any screen or component that you want to test end-to-end:
+
+```ts
+// Before
+import { Camera } from 'react-native-vision-camera'
+
+// After
+import { VisionCamera as Camera } from '../vision-camera/vision-camera'
+```
+
+### Step 4: Start Metro with the mock flag
+
+Pass the `RN_SRC_EXT` variable when starting Metro, building, or running tests:
+
+```bash
+# Start the bundler with mocks enabled
+RN_SRC_EXT=e2e.js react-native start
+
+# Build and run on iOS
+RN_SRC_EXT=e2e.js xcodebuild -workspace ios/YourApp.xcworkspace \
+  -scheme YourApp -configuration Debug -destination 'platform=iOS Simulator,name=iPhone 15'
+
+# Build and run on Android
+RN_SRC_EXT=e2e.js ./gradlew assembleRelease
+```
+
+When Metro runs with `RN_SRC_EXT=e2e.js`, it automatically prefers `.e2e.js` files over `.js` files, loading your mock instead of the real library. You should see `[DETOX] Using mocked react-native-vision-camera` in the device logs.
+
+<Warning>
+  The Metro `RN_SRC_EXT` approach swaps files at bundle time. You must rebuild the JavaScript bundle whenever you add or remove the flag.
+</Warning>
+
+## Mocking individual APIs
+
+If you only need to mock specific hooks or functions, you can do so individually without replacing the whole module:
+
+```ts
+import { useCameraDevice } from 'react-native-vision-camera'
+
+jest.mock('react-native-vision-camera', () => ({
+  ...jest.requireActual('react-native-vision-camera'),
+  useCameraDevice: jest.fn(),
+}))
+
+beforeEach(() => {
+  ;(useCameraDevice as jest.Mock).mockReturnValue({
+    id: 'back',
+    position: 'back',
+    formats: [],
+  })
+})
+```
+
+Using `jest.requireActual` ensures all non-mocked exports still behave normally.
+
+## Getting help
+
+If your mocking setup is not working as expected, browse the [GitHub issues](https://github.com/mrousavy/react-native-vision-camera/issues?q=is%3Aissue) for similar reports. If your issue is not already filed, [open a new issue](https://github.com/mrousavy/react-native-vision-camera/issues/new/choose) with as much detail as possible.

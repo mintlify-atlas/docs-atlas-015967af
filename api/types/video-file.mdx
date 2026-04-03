@@ -1,0 +1,95 @@
+---
+title: 'VideoFile'
+description: 'Types for recorded video files and recording options.'
+---
+
+`VideoFile` is passed to the `onRecordingFinished` callback of `Camera.startRecording()` when a recording completes successfully. It describes the video file written to the device's temporary directory.
+
+```ts
+camera.current.startRecording({
+  onRecordingFinished: (video) => {
+    console.log(`Saved to: ${video.path} (${video.duration}s)`)
+  },
+  onRecordingError: (error) => {
+    console.error(error)
+  },
+})
+```
+
+---
+
+## RecordVideoOptions
+
+Options passed to `Camera.startRecording()`.
+
+<ResponseField name="flash" type="'on' | 'off'">
+  Controls the torch (continuous flash) during recording.
+
+  - `'on'`: Torch stays on for the duration of the recording.
+  - `'off'`: Torch stays off.
+</ResponseField>
+
+<ResponseField name="fileType" type="'mov' | 'mp4'">
+  The container format of the output video file.
+
+  - `'mov'`: QuickTime container. Preferred on iOS.
+  - `'mp4'`: MPEG-4 container. Better cross-platform compatibility.
+</ResponseField>
+
+<ResponseField name="path" type="string">
+  A custom directory path where the video will be saved. VisionCamera generates a unique filename inside this directory. The directory must already exist, otherwise an error is thrown.
+
+  **Default:** The device's temporary directory.
+</ResponseField>
+
+<ResponseField name="videoCodec" type="'h264' | 'h265'">
+  The video codec used for encoding.
+
+  - `'h264'`: H.264/AVC. Widely supported, but less efficient at high resolutions or frame rates.
+  - `'h265'`: H.265/HEVC. Up to 50% smaller file sizes compared to H.264, but requires a newer device to decode.
+</ResponseField>
+
+<ResponseField name="onRecordingFinished" type="(video: VideoFile) => void" required>
+  Called when the recording finishes successfully and the file has been written to disk. Receives the `VideoFile` describing the output.
+</ResponseField>
+
+<ResponseField name="onRecordingError" type="(error: CameraCaptureError) => void" required>
+  Called when an unexpected runtime error occurs during recording. The partial recording may not be saved.
+</ResponseField>
+
+---
+
+## VideoFile
+
+Returned via `RecordVideoOptions.onRecordingFinished`. Extends `TemporaryFile`.
+
+<ResponseField name="path" type="string" required>
+  The file-system path of the recorded video.
+
+  <Note>
+    When displaying the video in a media player you may need to prepend `file://` to this path.
+    The file lives in the temporary directory and may be deleted when the app is closed.
+  </Note>
+</ResponseField>
+
+<ResponseField name="duration" type="number" required>
+  The duration of the recorded video, in seconds.
+</ResponseField>
+
+<ResponseField name="width" type="number" required>
+  The width of the video, in pixels.
+</ResponseField>
+
+<ResponseField name="height" type="number" required>
+  The height of the video, in pixels.
+</ResponseField>
+
+---
+
+## OnBytesWrittenVideoEvent
+
+Event payload emitted periodically while a recording is in progress, reporting cumulative bytes written so far.
+
+<ResponseField name="bytesWritten" type="number" required>
+  The total number of bytes written to the video file at the time this event was emitted.
+</ResponseField>

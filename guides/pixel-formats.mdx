@@ -1,0 +1,102 @@
+---
+title: Pixel Formats
+description: Understand the YUV and RGB pixel formats used by VisionCamera and how to choose the right one for your Frame Processor.
+---
+
+## What are pixel formats?
+
+A Camera's video pipeline operates in a specific pixel format that specifies how pixels are laid out in memory.
+
+When you are simply recording video (`video={true}`) without a Frame Processor, VisionCamera automatically selects the most efficient pixel format and enables [buffer compression](/guides/performance#buffer-compression) where available.
+
+When you are using Frame Processors, choosing the right pixel format matters for both correctness and performance.
+
+## Available formats
+
+VisionCamera exposes pixel formats through the `PixelFormat` type:
+
+```ts
+export type PixelFormat = 'yuv' | 'rgb' | 'unknown'
+```
+
+### `yuv` — recommended for processing
+
+Cameras natively produce YUV data. Instead of encoding a color value per channel like RGB, YUV stores brightness ("luma") in the Y channel and color ("chroma") in the U and V channels. The UV channels are typically half the size of Y:
+
+```
+YYYYUVYYYYUVYYYYUV
+```
+
+This format is much closer to what camera hardware actually captures (it is essentially a light sensor), and is more memory-efficient. At 4K resolution, a YUV frame is approximately **12 MB**.
+
+### `rgb` — convenient for direct pixel access
+
+The most commonly known pixel format lays out pixels in three 8-bit channels (R, G, B). Each pixel is 3 bytes, making a full 4K frame approximately **31 MB**.
+
+```
+RGBRGBRGBRGBRGBRGB
+```
+
+Cameras do not natively operate in RGB. Requesting `rgb` adds overhead and may involve an on-device YUV-to-RGB conversion.
+
+<Info>
+  A 4K frame in `yuv` is roughly **12 MB**. A 4K frame in `rgb` is roughly **31 MB**.
+</Info>
+
+### `unknown`
+
+The frame's pixel format could not be determined or is not supported by VisionCamera. Avoid writing Frame Processors that depend on `unknown` frames.
+
+## Setting the pixel format
+
+Pass the `pixelFormat` prop to `<Camera>`:
+
+```tsx
+function App() {
+  const frameProcessor = useFrameProcessor((frame) => {
+    'worklet'
+    console.log(frame.pixelFormat) // "rgb"
+  }, [])
+
+  return (
+    <Camera
+      style={StyleSheet.absoluteFill}
+      pixelFormat="rgb"
+      frameProcessor={frameProcessor}
+    />
+  )
+}
+```
+
+When `pixelFormat` is omitted, VisionCamera defaults to `yuv`.
+
+## Choosing the right format
+
+<Tip>
+  Use `yuv` whenever possible. If your ML model requires RGB input, consider converting the model weights to accept YUV (4:2:0) instead. The one-time conversion effort is worth the ongoing reduction in memory bandwidth.
+</Tip>
+
+| Scenario | Recommended format |
+|---|---|
+| ML models (face detection, object detection, etc.) | `yuv` |
+| Reading raw pixel bytes in JavaScript | `rgb` |
+| Recording video only (no Frame Processor) | automatic (let VisionCamera decide) |
+| Custom C++/native plugin | `yuv` |
+
+## HDR pixel formats
+
+When HDR is enabled, VisionCamera uses a 10-bit-per-channel pixel format instead of the standard 8-bit. Make sure your Frame Processor Plugin can handle 10-bit buffers, or disable HDR if your plugin only supports 8-bit.
+
+On iOS:
+- Standard: [`kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange`](https://developer.apple.com/documentation/corevideo/kcvpixelformattype_420ypcbcr8biplanarvideorange)
+- HDR: [`kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange`](https://developer.apple.com/documentation/corevideo/1563591-pixel_format_identifiers/kcvpixelformattype_420ypcbcr10biplanarvideorange)
+
+See [Understanding YpCbCr Image Formats](https://developer.apple.com/documentation/accelerate/conversion/understanding_ypcbcr_image_formats) for more detail.
+
+## Buffer compression
+
+[Buffer compression](/guides/performance#buffer-compression) is automatically enabled when you are not using a Frame Processor, since it uses a format that differs from standard YUV. When a Frame Processor is attached, buffer compression is disabled to ensure the pixel data is accessible in the expected format.
+
+On iOS:
+- Uncompressed: [`kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange`](https://developer.apple.com/documentation/corevideo/kcvpixelformattype_420ypcbcr8biplanarvideorange)
+- Compressed: [`kCVPixelFormatType_Lossy_420YpCbCr8BiPlanarVideoRange`](https://developer.apple.com/documentation/corevideo/3746862-anonymous/kcvpixelformattype_lossy_420ypcbcr8biplanarvideorange)

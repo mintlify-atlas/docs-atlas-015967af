@@ -1,0 +1,183 @@
+---
+title: Orientation
+description: Understand how VisionCamera handles camera sensor orientation, output orientation, and preview orientation — and how to respond to rotation changes.
+---
+
+## How orientation works
+
+A camera sensor delivers buffers at a fixed physical size — for example, 4096 × 2160 pixels. Re-allocating such large buffers on every device rotation is expensive, so VisionCamera never rotates the raw pixel data. Instead, it applies rotation through metadata flags, view transforms, or orientation hints depending on the output type.
+
+### Photo and video output
+
+Photos and videos are captured in the sensor's native orientation. VisionCamera writes the correct presentation rotation as an EXIF flag (for photos) or a container-level tag (for videos) so media players and galleries display them correctly.
+
+<Info>
+This behavior is automatic. You can control which orientation is written via the `outputOrientation` prop.
+</Info>
+
+### Preview view
+
+The preview stream arrives in the sensor's native orientation, but VisionCamera applies a rotation + translation matrix to the view so the live preview always appears upright to the user.
+
+<Info>
+Preview rotation is automatic and always follows the screen's current rotation.
+</Info>
+
+### Frame processors
+
+Frames delivered to frame processors carry the sensor's native orientation. The frame's `orientation` property tells you how many degrees the buffer is rotated relative to the device's natural portrait mode.
+
+<Info>
+Frame processor orientation must be handled manually. Pass `Frame.orientation` to your plugin so it can interpret the buffer correctly. In MLKit, for example, you set `mlImage.orientation = frame.orientation`.
+</Info>
+
+## The `Orientation` type
+
+```ts
+type Orientation =
+  | 'portrait'           // 0°   — home button at the bottom
+  | 'landscape-left'     // 90°  — home button on the left
+  | 'portrait-upside-down' // 180° — home button at the top
+  | 'landscape-right'    // 270° — home button on the right
+```
+
+## The `OutputOrientation` type
+
+`OutputOrientation` controls which orientation is written into captured photos and videos:
+
+```ts
+type OutputOrientation = 'device' | 'preview'
+```
+
+| Value | Behavior |
+|-------|----------|
+| `'device'` | (default) Follows the device's physical orientation, even when the screen-rotation lock is on. Holding the phone in landscape always produces a landscape photo — identical to the iOS stock Camera. |
+| `'preview'` | Follows the physical orientation but respects the screen-rotation lock. If the screen is locked to portrait, captured photos and videos are also portrait. |
+
+## Setting output orientation
+
+```tsx
+<Camera
+  device={device}
+  isActive={true}
+  outputOrientation="device"
+/>
+```
+
+## Listening for orientation changes
+
+### `onOutputOrientationChanged`
+
+Called whenever the output orientation changes. Use this to rotate capture-button UI elements to match the current capture orientation:
+
+```tsx
+const [outputOrientation, setOutputOrientation] = useState<Orientation>('portrait')
+
+return (
+  <Camera
+    device={device}
+    isActive={true}
+    onOutputOrientationChanged={setOutputOrientation}
+  />
+)
+```
+
+### `onPreviewOrientationChanged`
+
+Called whenever the preview view rotates. This may differ from the output orientation — for example, on iPads whose natural orientation is landscape.
+
+```tsx
+<Camera
+  device={device}
+  isActive={true}
+  onPreviewOrientationChanged={(previewOrientation) => {
+    console.log('Preview is now:', previewOrientation)
+  }}
+/>
+```
+
+### `onUIRotationChanged`
+
+A convenience event that fires whenever UI elements should be rotated. The value is a number in degrees that you can apply directly as a `rotate` transform:
+
+```tsx
+const [uiRotation, setUiRotation] = useState(0)
+
+const uiStyle: ViewStyle = {
+  transform: [{ rotate: `${uiRotation}deg` }],
+}
+
+return (
+  <View>
+    <Camera
+      device={device}
+      isActive={true}
+      onUIRotationChanged={setUiRotation}
+    />
+    <FlipCameraButton style={uiStyle} />
+  </View>
+)
+```
+
+<Tip>
+Animate changes to `uiRotation` for a smoother experience. Use `react-native-reanimated` to interpolate the `rotate` style between rotation updates.
+</Tip>
+
+## Locking output to portrait
+
+To always produce portrait photos and videos regardless of how the user holds the device, set `outputOrientation="preview"` and ensure your screen rotation is locked to portrait via your app's UI configuration:
+
+```tsx
+<Camera
+  device={device}
+  isActive={true}
+  outputOrientation="preview"
+/>
+```
+
+## Rotating frame processor output
+
+Because frame processors receive frames in the sensor's native orientation, you typically need to rotate the frame before passing it to a detection algorithm.
+
+### Rotate to output orientation
+
+If your algorithm detects objects or faces and the user is in landscape, rotate the frame to match the current output orientation so detections are computed in the correct spatial context:
+
+```ts
+// Inside a frame processor
+const frameOrientation = rotateToOutputOrientation(frame.orientation, outputOrientation)
+```
+
+### Rotate to preview orientation
+
+If your frame processor overlays visual feedback onto the preview, rotate to the preview orientation instead so drawings align with what the user sees:
+
+```ts
+// Inside a frame processor
+const frameOrientation = rotateToPreviewOrientation(frame.orientation, previewOrientation)
+```
+
+## Mirroring
+
+Photos, snapshots, and videos can be mirrored along the vertical axis (left/right flip) using the `isMirrored` prop:
+
+```tsx
+<Camera
+  device={device}
+  isActive={true}
+  isMirrored={true}
+/>
+```
+
+By default, outputs are mirrored for the front (selfie) camera and not mirrored for back cameras. The preview view follows the same default and is not affected by the `isMirrored` prop.
+
+## Camera sensor orientation
+
+Every `CameraDevice` exposes a `sensorOrientation` property that describes how the physical sensor is mounted relative to the phone:
+
+```ts
+// CameraDevice.sensorOrientation: Orientation
+console.log(device.sensorOrientation) // e.g. 'landscape-left'
+```
+
+Most phone cameras are mounted rotated by 90°, meaning the sensor's native width and height are swapped compared to portrait mode. VisionCamera uses this value internally to compute the correct transforms for all outputs.

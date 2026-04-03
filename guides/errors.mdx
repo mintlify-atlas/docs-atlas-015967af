@@ -1,0 +1,323 @@
+---
+title: "Camera errors"
+description: "Understand and handle VisionCamera's typed error system, covering runtime errors, capture errors, and all error codes by category."
+---
+
+VisionCamera surfaces errors through a typed system so you can identify the exact cause and respond appropriately. Every error has a `code` in the form `domain/code`, a human-readable `message`, and an optional `cause` with native details.
+
+## Error types
+
+### CameraRuntimeError
+
+`CameraRuntimeError` represents errors that occur in the camera session itself — in the preview, outputs, or device configuration. The camera surfaces these through the `onError` prop on `<Camera>`.
+
+```tsx
+import { Camera, CameraRuntimeError } from 'react-native-vision-camera'
+import { useCallback } from 'react'
+
+function App() {
+  const onError = useCallback((error: CameraRuntimeError) => {
+    console.error(`Camera error [${error.code}]: ${error.message}`)
+  }, [])
+
+  return <Camera onError={onError} {...cameraProps} />
+}
+```
+
+`CameraRuntimeError` covers codes from the `permission/`, `parameter/`, `device/`, `format/`, `session/`, `system/`, and `unknown/` domains.
+
+### CameraCaptureError
+
+`CameraCaptureError` represents errors that occur during photo capture or video recording. These are thrown as Promise rejections from `takePhoto`, `takeSnapshot`, `startRecording`, `stopRecording`, `pauseRecording`, `resumeRecording`, and `cancelRecording`.
+
+```tsx
+import { Camera, CameraCaptureError } from 'react-native-vision-camera'
+import { useCallback, useRef } from 'react'
+
+function App() {
+  const camera = useRef<Camera>(null)
+
+  const onPressCapture = useCallback(async () => {
+    try {
+      const photo = await camera.current?.takePhoto()
+      console.log('Photo saved to:', photo?.path)
+    } catch (e) {
+      if (e instanceof CameraCaptureError) {
+        switch (e.code) {
+          case 'capture/file-io-error':
+            console.error('Failed to write photo to disk.')
+            break
+          case 'capture/insufficient-storage':
+            console.error('Not enough storage space.')
+            break
+          default:
+            console.error(e)
+            break
+        }
+      }
+    }
+  }, [camera])
+
+  return <Camera ref={camera} {...cameraProps} />
+}
+```
+
+## Error properties
+
+Every error (both `CameraRuntimeError` and `CameraCaptureError`) extends `CameraError` and exposes:
+
+| Property | Type | Description |
+|---|---|---|
+| `code` | `string` | Typed code in the form `domain/code`. |
+| `message` | `string` | Non-localized description of the error. |
+| `cause` | `Error \| undefined` | The underlying native error, if available. |
+
+The `cause` wraps a native `NSError` (iOS) or `Throwable` (Android) with additional fields:
+
+| Field | Platform | Description |
+|---|---|---|
+| `cause.message` | Both | Native error message. |
+| `cause.code` | iOS only | `NSError.code`. |
+| `cause.domain` | iOS only | `NSError.domain`. |
+| `cause.details` | iOS only | `NSError.userInfo` dictionary. |
+| `cause.stacktrace` | Android only | Java `Throwable` stack trace string. |
+| `cause.cause` | Both | Recursive cause chain. |
+
+## Error codes by category
+
+<AccordionGroup>
+  <Accordion title="device/* — camera device errors">
+    These errors relate to selecting or configuring a camera device.
+
+    | Code | Description |
+    |---|---|
+    | `device/configuration-error` | The camera configuration is invalid or unsupported. |
+    | `device/no-device` | No camera device was found (the `device` prop is null). |
+    | `device/invalid-device` | The given device ID is not valid. |
+    | `device/microphone-unavailable` | The microphone is not available on this device. |
+    | `device/pixel-format-not-supported` | The requested pixel format is not supported. |
+    | `device/low-light-boost-not-supported` | Low-light boost is not supported on this device. |
+    | `device/focus-not-supported` | Focus control is not supported on this device. |
+    | `device/camera-not-available-on-simulator` | Camera hardware is unavailable in the iOS Simulator. |
+    | `device/camera-already-in-use` | The camera is already in use by another process or app. |
+
+    ```tsx
+    const onError = useCallback((error: CameraRuntimeError) => {
+      if (error.code === 'device/camera-already-in-use') {
+        // Another app is using the camera — ask user to close it
+      }
+    }, [])
+    ```
+  </Accordion>
+
+  <Accordion title="permission/* — permission errors">
+    These errors occur when the required system permission has not been granted.
+
+    | Code | Description |
+    |---|---|
+    | `permission/camera-permission-denied` | The user denied camera permission. |
+    | `permission/microphone-permission-denied` | The user denied microphone permission. |
+
+    ```tsx
+    const onError = useCallback((error: CameraRuntimeError) => {
+      if (error.code === 'permission/camera-permission-denied') {
+        // Prompt user to grant permission in system settings
+      }
+    }, [])
+    ```
+
+    <Tip>Use `useCameraPermission()` to request permissions before mounting `<Camera>`.</Tip>
+  </Accordion>
+
+  <Accordion title="capture/* — capture errors">
+    These errors are thrown by `takePhoto`, `takeSnapshot`, and the recording APIs.
+
+    | Code | Description |
+    |---|---|
+    | `capture/recording-in-progress` | A recording is already in progress. |
+    | `capture/recording-canceled` | The recording was canceled via `cancelRecording()`. |
+    | `capture/no-recording-in-progress` | Tried to stop/pause a recording that isn't active. |
+    | `capture/file-io-error` | Failed to write the captured file to disk. |
+    | `capture/invalid-path` | The output path is invalid. |
+    | `capture/create-temp-file-error` | Could not create a temporary file for capture. |
+    | `capture/create-recorder-error` | Failed to initialize the video recorder. |
+    | `capture/insufficient-storage` | Not enough storage space to save the capture. |
+    | `capture/video-not-enabled` | Video output is not enabled on the camera. |
+    | `capture/photo-not-enabled` | Photo output is not enabled on the camera. |
+    | `capture/frame-invalid` | The captured frame is invalid or empty. |
+    | `capture/no-data` | No data was returned from the capture. |
+    | `capture/recorder-error` | An internal recorder error occurred. |
+    | `capture/focus-canceled` | A focus operation was canceled before completing. |
+    | `capture/focus-requires-preview` | Focus requires preview to be enabled. |
+    | `capture/timed-out` | The capture operation timed out. |
+    | `capture/snapshot-failed` | Taking a snapshot failed. |
+    | `capture/snapshot-failed-preview-not-enabled` | Snapshot requires preview to be enabled. |
+    | `capture/image-data-access-error` | Could not access pixel data from the captured image. |
+    | `capture/encoder-error` | The video encoder encountered an error. |
+    | `capture/invalid-image-type` | The requested image format is not valid. |
+    | `capture/failed-writing-metadata` | Failed to write EXIF or metadata to the file. |
+    | `capture/unknown` | An unknown capture error occurred. |
+  </Accordion>
+
+  <Accordion title="parameter/* — parameter errors">
+    These errors occur when you pass invalid or incompatible props to `<Camera>`.
+
+    | Code | Description |
+    |---|---|
+    | `parameter/invalid-parameter` | A required prop has an invalid value. |
+    | `parameter/unsupported-output` | The requested output type is not supported. |
+    | `parameter/unsupported-input` | The requested input type is not supported. |
+    | `parameter/invalid-combination` | The combination of props is not valid together. |
+  </Accordion>
+
+  <Accordion title="format/* — format errors">
+    These errors occur when a camera format or its properties are not compatible with your configuration.
+
+    | Code | Description |
+    |---|---|
+    | `format/invalid-fps` | The requested FPS is not supported by the current format. |
+    | `format/invalid-video-hdr` | Video HDR is not supported by the current format. |
+    | `format/photo-hdr-and-video-hdr-not-suppoted-simultaneously` | Photo HDR and Video HDR cannot both be enabled at the same time. |
+    | `format/low-light-boost-not-supported-with-hdr` | Low-light boost is incompatible with HDR mode. |
+    | `format/invalid-video-stabilization-mode` | The requested video stabilization mode is not supported. |
+    | `format/incompatible-pixel-format-with-hdr-setting` | The pixel format is incompatible with the HDR setting. |
+    | `format/invalid-format` | The selected format is not valid. |
+    | `format/format-required` | A format must be specified for this configuration. |
+  </Accordion>
+
+  <Accordion title="session/* — session errors">
+    These errors occur at the camera session level, often related to audio or hardware resources.
+
+    | Code | Description |
+    |---|---|
+    | `session/camera-not-ready` | The camera session has not finished initializing. |
+    | `session/audio-in-use-by-other-app` | The audio session is being used by another app (e.g. during a phone call). |
+    | `session/no-outputs` | No outputs are configured on the camera session. |
+    | `session/audio-session-failed-to-activate` | The audio session could not be activated. |
+    | `session/hardware-cost-too-high` | The requested configuration exceeds the device's hardware capability. |
+    | `session/invalid-output-configuration` | The output configuration is not valid. |
+  </Accordion>
+
+  <Accordion title="system/* — system errors">
+    These errors come from deeper system-level failures.
+
+    | Code | Description |
+    |---|---|
+    | `system/camera-module-not-found` | The native VisionCamera module was not linked correctly. |
+    | `system/camera-is-restricted` | Camera access is restricted by MDM or parental controls. |
+    | `system/location-not-enabled` | Location APIs are not enabled at build time. |
+    | `system/no-camera-manager` | The native camera manager could not be found. |
+    | `system/frame-processors-unavailable` | Frame Processors are not available (worklet runtime not installed). |
+    | `system/recording-while-frame-processing-unavailable` | Cannot record video while frame processing is unavailable. |
+    | `system/view-not-found` | The native Camera view could not be found in the view tree. |
+    | `system/max-cameras-in-use` | The maximum number of simultaneous camera sessions has been reached. |
+    | `system/do-not-disturb-bug` | Do Not Disturb mode caused a camera session interruption (iOS bug). |
+  </Accordion>
+
+  <Accordion title="code-scanner/* — code scanner errors">
+    These errors relate to the barcode and QR code scanner.
+
+    | Code | Description |
+    |---|---|
+    | `code-scanner/not-compatible-with-outputs` | The code scanner is not compatible with the current output configuration. |
+    | `code-scanner/code-type-not-supported` | The requested code type is not supported on this device. |
+    | `code-scanner/cannot-load-model` | The ML model for code scanning could not be loaded. |
+  </Accordion>
+</AccordionGroup>
+
+## Switching on error codes
+
+Use a `switch` statement on `error.code` to respond to specific conditions:
+
+```ts
+import { CameraRuntimeError } from 'react-native-vision-camera'
+
+function handleCameraError(error: CameraRuntimeError) {
+  switch (error.code) {
+    case 'device/configuration-error':
+      // Try a different format or reduce enabled outputs
+      break
+    case 'device/microphone-unavailable':
+      // Disable audio and retry
+      break
+    case 'session/audio-in-use-by-other-app':
+      // Notify user that another app is using audio
+      break
+    case 'permission/camera-permission-denied':
+      // Open app settings
+      break
+    default:
+      console.error(error)
+      break
+  }
+}
+```
+
+## Full error handling example
+
+```tsx
+import React, { useCallback, useRef } from 'react'
+import { Camera, CameraRuntimeError, CameraCaptureError } from 'react-native-vision-camera'
+import type { CameraProps } from 'react-native-vision-camera'
+
+function CameraScreen() {
+  const camera = useRef<Camera>(null)
+
+  // Handle session-level runtime errors via the onError prop
+  const onError = useCallback((error: CameraRuntimeError) => {
+    switch (error.code) {
+      case 'permission/camera-permission-denied':
+        alert('Camera permission was denied. Please enable it in Settings.')
+        break
+      case 'device/camera-already-in-use':
+        alert('The camera is in use by another app.')
+        break
+      case 'system/camera-module-not-found':
+        alert('VisionCamera native module is not linked correctly.')
+        break
+      default:
+        console.error(`[${error.code}]: ${error.message}`, error.cause)
+        break
+    }
+  }, [])
+
+  // Handle capture errors via try/catch
+  const takePhoto = useCallback(async () => {
+    try {
+      const photo = await camera.current?.takePhoto({ flash: 'auto' })
+      console.log('Captured:', photo?.path)
+    } catch (e) {
+      if (e instanceof CameraCaptureError) {
+        switch (e.code) {
+          case 'capture/file-io-error':
+            alert('Failed to save the photo. Check storage permissions.')
+            break
+          case 'capture/insufficient-storage':
+            alert('Your device is out of storage.')
+            break
+          default:
+            console.error(e)
+            break
+        }
+      }
+    }
+  }, [camera])
+
+  return <Camera ref={camera} onError={onError} {...cameraProps} />
+}
+```
+
+<Note>
+  If you do not pass an `onError` handler to `<Camera>`, runtime errors are automatically logged to the console via `console.error`. Always handle errors in production apps.
+</Note>
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Troubleshooting" icon="wrench" href="/guides/troubleshooting">
+    Step-by-step solutions for common build and runtime issues.
+  </Card>
+  <Card title="Camera component" icon="camera" href="/api/camera-component">
+    Full API reference for the Camera component and its props.
+  </Card>
+</CardGroup>

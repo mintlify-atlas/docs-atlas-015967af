@@ -1,23 +1,11 @@
 {
-  "$schema": "https://mintlify.com/docs.json",
-  "name": "VisionCamera",
+  "projectType": "sdk-library",
+  "projectName": "VisionCamera",
+  "projectDescription": "A powerful, high-performance React Native camera library supporting photo/video capture, QR/barcode scanning, and realtime frame processing via JSI worklets.",
   "theme": "palm",
-  "colors": {
-    "primary": "#626b64",
-    "light": "#acb7ac"
-  },
-  "favicon": "https://media.brand.dev/9de9988c-cdd2-41f1-af32-92dc83470181.png",
-  "navbar": {
-    "primary": {
-      "type": "github",
-      "href": "https://github.com/mrousavy/react-native-vision-camera"
-    }
-  },
-  "footer": {
-    "socials": {
-      "github": "https://github.com/mrousavy/react-native-vision-camera"
-    }
-  },
+  "primaryColor": "#626b64",
+  "lightColor": "#acb7ac",
+  "darkColor": null,
   "navigation": {
     "tabs": [
       {
@@ -111,5 +99,53 @@
         ]
       }
     ]
-  }
+  },
+  "keyFeatures": [
+    "Photo and video capture with configurable quality, codec, and bitrate",
+    "QR/barcode scanning via native iOS APIs and Android MLKit",
+    "Realtime frame processors using JSI worklets at 60+ FPS",
+    "Skia-powered drawing and filters directly on camera frames",
+    "Multi-camera and virtual device support (wide, ultra-wide, telephoto)",
+    "Customizable camera formats, FPS (up to 240), HDR, and stabilization",
+    "Smooth zooming with Reanimated integration",
+    "Exposure, focus, and orientation controls",
+    "Expo config plugin support",
+    "GPS location tagging for photos"
+  ],
+  "publicApiSurface": [
+    "Camera (React component)",
+    "useCameraDevice(position, options?)",
+    "useCameraDevices()",
+    "useCameraFormat(device, filters)",
+    "useCameraPermission()",
+    "useMicrophonePermission()",
+    "useCodeScanner(config)",
+    "useFrameProcessor(processor, deps)",
+    "useSkiaFrameProcessor(processor, deps)",
+    "getCameraDevice(devices, position, options?)",
+    "getCameraFormat(device, filters)",
+    "Camera.takePhoto(options?)",
+    "Camera.takeSnapshot(options?)",
+    "Camera.startRecording(options)",
+    "Camera.stopRecording()",
+    "Camera.pauseRecording()",
+    "Camera.resumeRecording()",
+    "Camera.cancelRecording()",
+    "Camera.focus(point)",
+    "Camera.getAvailableCameraDevices()",
+    "Camera.getCameraPermissionStatus()",
+    "Camera.requestCameraPermission()",
+    "Camera.getMicrophonePermissionStatus()",
+    "Camera.requestMicrophonePermission()",
+    "runAsync(frame, func)",
+    "runAtTargetFps(fps, func)",
+    "VisionCameraProxy",
+    "Templates (format presets)",
+    "CameraDevice type",
+    "CameraDeviceFormat type",
+    "Frame type",
+    "PhotoFile type",
+    "VideoFile type",
+    "CodeScanner type"
+  ]
 }

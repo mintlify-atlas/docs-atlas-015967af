@@ -1,0 +1,189 @@
+---
+title: "Preview"
+description: "Control the Camera preview stream: resize mode, frame rate, resolution, overlays, and Skia integration."
+---
+
+The `<Camera>` component renders a live preview view alongside its capture outputs. The preview is its own output stream — enabling or disabling it has no effect on photo, video, or frame-processor outputs.
+
+## Enable and disable the preview
+
+The preview is enabled by default (`preview={true}`). Disable it to save resources when you only need capture outputs without a visible viewfinder:
+
+```tsx
+<Camera
+  device={device}
+  isActive={true}
+  photo={true}
+  preview={false}
+/>
+```
+
+<Note>
+  When using a Skia Frame Processor, VisionCamera disables the native preview automatically and replaces it with a Skia canvas that renders directly onto the video stream.
+</Note>
+
+## Resize mode
+
+The `resizeMode` prop controls how the preview fits inside the `<Camera>` view:
+
+<Tabs>
+  <Tab title="cover (default)">
+    The preview fills the entire view, cropping any content that extends beyond the view bounds. The aspect ratio is preserved.
+
+    ```tsx
+    <Camera
+      device={device}
+      isActive={true}
+      resizeMode="cover"
+    />
+    ```
+  </Tab>
+  <Tab title="contain">
+    The preview scales down to fit entirely within the view. The aspect ratio is preserved, and letterbox/pillarbox bars appear if the aspect ratios differ.
+
+    ```tsx
+    <Camera
+      device={device}
+      isActive={true}
+      resizeMode="contain"
+    />
+    ```
+  </Tab>
+</Tabs>
+
+## Preview start/stop events
+
+The preview momentarily pauses when the camera session restarts — for example when switching between front and back camera, or when changing a format. Use `onPreviewStarted` and `onPreviewStopped` to react to these transitions, such as showing or hiding a loading indicator:
+
+```tsx
+<Camera
+  device={device}
+  isActive={true}
+  onPreviewStarted={() => setPreviewReady(true)}
+  onPreviewStopped={() => setPreviewReady(false)}
+/>
+```
+
+## Frame rate
+
+The preview renders at the same frame rate as the video stream, which is controlled by the `fps` prop:
+
+```tsx
+{/* Fixed 60 FPS */}
+<Camera {...props} fps={60} />
+
+{/* Adaptive: camera chooses between 24 and 60 FPS based on lighting */}
+<Camera {...props} fps={[24, 60]} />
+```
+
+Higher FPS produces a smoother preview at the cost of battery and thermal budget.
+
+## Resolution
+
+The preview resolution follows different rules on iOS and Android.
+
+**iOS:** The preview resolution matches the video resolution of the selected format. To change preview resolution, select a format with a different `videoResolution`:
+
+```ts
+import { useCameraFormat } from 'react-native-vision-camera'
+
+const format = useCameraFormat(device, [
+  { videoResolution: { width: 1280, height: 720 } },
+])
+```
+
+**Android:** The preview renders at full HD or the size of the `<Camera>` view, whichever is smaller. When a format is set, the preview attempts to match:
+- The `video` resolution and aspect ratio when `video={true}`
+- The `photo` resolution and aspect ratio when `photo={true}`
+
+```tsx
+<Camera
+  device={device}
+  isActive={true}
+  format={format}
+  photo={true}   // preview will match photo resolution and aspect ratio
+/>
+```
+
+## Preview orientation
+
+Preview orientation always follows the screen/interface rotation. This is independent of the `outputOrientation` prop, which only affects photo, video, and snapshot outputs.
+
+Use `onPreviewOrientationChanged` to be notified when the preview rotates:
+
+```tsx
+<Camera
+  {...props}
+  onPreviewOrientationChanged={(orientation) => {
+    console.log('Preview orientation:', orientation)
+  }}
+/>
+```
+
+## Mirror mode
+
+Front-facing cameras are mirrored by default so the preview looks like a mirror. Back cameras are not mirrored. You can override this with the `isMirrored` prop:
+
+```tsx
+{/* Force mirror the back camera */}
+<Camera {...props} isMirrored={true} />
+
+{/* Disable mirroring for the front camera */}
+<Camera {...props} isMirrored={false} />
+```
+
+<Note>
+  `isMirrored` affects photo, video, and snapshot outputs — not the preview itself. The preview is always mirrored for front cameras at the OS level.
+</Note>
+
+## Android preview view type
+
+On Android, the `<Camera>` view uses a `SurfaceView` by default. You can switch to `TextureView` if you need masks, transparency, rotations, or clipping:
+
+<Tabs>
+  <Tab title="SurfaceView (default)">
+    More efficient and supports HDR rendering, but does not support transparency, clipping, or rotation of the view.
+
+    ```tsx
+    <Camera {...props} androidPreviewViewType="surface-view" />
+    ```
+  </Tab>
+  <Tab title="TextureView">
+    Supports masks, transparency, clipping, and rotation, but is less efficient and does not support HDR rendering.
+
+    ```tsx
+    <Camera {...props} androidPreviewViewType="texture-view" />
+    ```
+  </Tab>
+</Tabs>
+
+## Skia preview
+
+When you provide a `DrawableFrameProcessor` (one that uses `@shopify/react-native-skia`), VisionCamera disables the native preview output and renders frames onto a `SkiaCanvas` instead. The canvas overlays the `<Camera>` view and supports drawing arbitrary shapes, text, and shaders on top of every camera frame.
+
+```tsx
+import { useDrawFrameProcessor } from 'react-native-vision-camera'
+
+const frameProcessor = useDrawFrameProcessor((frame) => {
+  'worklet'
+  // draw on `frame` using Skia canvas commands
+}, [])
+
+return (
+  <Camera
+    device={device}
+    isActive={true}
+    frameProcessor={frameProcessor}
+    // preview={false} is set automatically when using a drawable frame processor
+  />
+)
+```
+
+<CardGroup cols={2}>
+  <Card title="Zooming" icon="magnifying-glass" href="/guides/zooming">
+    Implement pinch-to-zoom with Reanimated and Gesture Handler.
+  </Card>
+  <Card title="Taking photos" icon="image" href="/guides/taking-photos">
+    Capture photos and snapshots through the Camera ref.
+  </Card>
+</CardGroup>

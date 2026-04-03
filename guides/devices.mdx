@@ -1,0 +1,260 @@
+---
+title: Camera devices
+description: Understand physical and virtual camera devices, select the right one for your app, and handle external cameras.
+sidebarTitle: Devices
+keywords: [react-native, vision camera, camera device, useCameraDevice, getCameraDevice, multi-camera, physical device]
+---
+
+## What are camera devices?
+
+A `CameraDevice` represents either a physical lens on the device or a virtual combination of multiple physical lenses.
+
+**Physical devices** map directly to a single camera lens:
+
+- Back wide-angle camera (1x)
+- Back ultra-wide-angle camera (0.5x)
+- Back telephoto camera (3x)
+- Front wide-angle (FaceTime HD) camera
+
+**Virtual devices** combine two or more physical lenses into a single logical device. The OS handles switching between the underlying hardware automatically as the user zooms:
+
+- Dual Camera — wide-angle + telephoto
+- Dual Wide Camera — ultra-wide + wide-angle
+- Triple Camera — ultra-wide + wide-angle + telephoto
+
+Virtual devices can also capture frames from multiple lenses simultaneously and fuse them into higher-quality images.
+
+<Note>
+  Virtual devices take longer to initialize and use more system resources than single-physical-camera devices.
+</Note>
+
+## Select the default device
+
+For most apps, you want the best available camera facing a specific direction. Pass `'back'` or `'front'` to `useCameraDevice`:
+
+<Tabs>
+  <Tab title="Hooks API">
+    ```ts
+    import { useCameraDevice } from 'react-native-vision-camera'
+
+    const device = useCameraDevice('back')
+    ```
+  </Tab>
+  <Tab title="Imperative API">
+    ```ts
+    import { Camera } from 'react-native-vision-camera'
+    import { getCameraDevice } from 'react-native-vision-camera'
+
+    const devices = Camera.getAvailableCameraDevices()
+    const device = getCameraDevice(devices, 'back')
+    ```
+  </Tab>
+</Tabs>
+
+VisionCamera automatically picks the best matching device using an internal scoring system that prefers `full` hardware level, wide-angle lenses, and single-physical-camera devices (for faster startup).
+
+## Select a specific multi-camera device
+
+To request a specific combination of physical cameras, pass a `physicalDevices` filter. VisionCamera returns the best match — or the closest available alternative if the exact combination is not present on the device.
+
+<Tabs>
+  <Tab title="Hooks API">
+    ```ts
+    import { useCameraDevice } from 'react-native-vision-camera'
+
+    // Triple camera — enables 0.5x, 1x, and 3x zoom switching
+    const device = useCameraDevice('back', {
+      physicalDevices: [
+        'ultra-wide-angle-camera',
+        'wide-angle-camera',
+        'telephoto-camera',
+      ],
+    })
+    ```
+  </Tab>
+  <Tab title="Imperative API">
+    ```ts
+    import { Camera, getCameraDevice } from 'react-native-vision-camera'
+
+    const devices = Camera.getAvailableCameraDevices()
+    const device = getCameraDevice(devices, 'back', {
+      physicalDevices: [
+        'ultra-wide-angle-camera',
+        'wide-angle-camera',
+        'telephoto-camera',
+      ],
+    })
+    ```
+  </Tab>
+</Tabs>
+
+<Tip>
+  Start the zoom Reanimated shared value at `device.neutralZoom` so the camera opens at the 1x wide-angle lens rather than zoomed all the way out to the ultra-wide.
+</Tip>
+
+### iPhone 13 Pro example
+
+Here is the full list of devices exposed on an iPhone 13 Pro:
+
+| Device | physicalDevices | Zoom |
+|--------|-----------------|------|
+| Back wide-angle | `['wide-angle-camera']` | 1x |
+| Back ultra-wide | `['ultra-wide-angle-camera']` | 0.5x |
+| Back telephoto | `['telephoto-camera']` | 3x |
+| Back Dual Camera | `['wide-angle-camera', 'telephoto-camera']` | 1x – 3x |
+| Back Dual Wide Camera | `['ultra-wide-angle-camera', 'wide-angle-camera']` | 0.5x – 1x |
+| Back Triple Camera | `['ultra-wide-angle-camera', 'wide-angle-camera', 'telephoto-camera']` | 0.5x – 3x |
+| Back LiDAR | `['wide-angle-camera']` + depth | 1x |
+| Front wide-angle | `['wide-angle-camera']` | 1x |
+| Front TrueDepth | `['wide-angle-camera']` + depth | 1x |
+
+## Filter devices manually
+
+If you need full control over device selection, retrieve all devices and apply your own logic:
+
+<Tabs>
+  <Tab title="Hooks API">
+    ```ts
+    import { useCameraDevices } from 'react-native-vision-camera'
+    import { useMemo } from 'react'
+
+    const devices = useCameraDevices()
+    const device = useMemo(() => findBestDevice(devices), [devices])
+    ```
+  </Tab>
+  <Tab title="Imperative API">
+    ```ts
+    import { Camera } from 'react-native-vision-camera'
+
+    const devices = Camera.getAvailableCameraDevices()
+    const device = findBestDevice(devices)
+    ```
+  </Tab>
+</Tabs>
+
+## External cameras
+
+VisionCamera supports external camera devices such as:
+
+- USB cameras that implement the [USB Video Class (UVC) specification](https://en.wikipedia.org/wiki/List_of_USB_video_class_devices)
+- [Continuity Camera](https://support.apple.com/en-us/HT213244) devices (iPhone or Mac cameras shared over Wi-Fi)
+- Bluetooth and Wi-Fi cameras supported by the platform-native APIs
+
+Because external cameras can be connected or disconnected at any time, the available device list can change while your app is running. The hooks update automatically. With the imperative API you must register a listener.
+
+<Tabs>
+  <Tab title="Hooks API">
+    ```ts
+    import { useCameraDevice } from 'react-native-vision-camera'
+
+    // Re-renders automatically when the external camera is plugged in/out
+    const usbCamera = useCameraDevice('external')
+    ```
+  </Tab>
+  <Tab title="Imperative API">
+    ```ts
+    import { Camera } from 'react-native-vision-camera'
+
+    const listener = Camera.addCameraDevicesChangedListener((devices) => {
+      const usbCamera = devices.find((d) => d.position === 'external')
+      // update state with usbCamera
+    })
+
+    // Later, when the component unmounts:
+    listener.remove()
+    ```
+  </Tab>
+</Tabs>
+
+## CameraDevice properties
+
+The `CameraDevice` object exposes the following properties:
+
+<ParamField path="id" type="string" required>
+  A unique identifier for this camera device instance. Passed internally to the native `<Camera>` view.
+</ParamField>
+
+<ParamField path="position" type="'front' | 'back' | 'external'" required>
+  The physical position of this camera relative to the phone.
+</ParamField>
+
+<ParamField path="name" type="string" required>
+  A friendly, localized name describing the camera (e.g. `"Back Ultra Wide Camera"`).
+</ParamField>
+
+<ParamField path="physicalDevices" type="PhysicalCameraDeviceType[]" required>
+  The physical camera lenses this device consists of. One of:
+  - `"ultra-wide-angle-camera"` — FOV 94° or higher (0.5x)
+  - `"wide-angle-camera"` — FOV 60°–94° (1x)
+  - `"telephoto-camera"` — FOV 60° or lower (3x+)
+</ParamField>
+
+<ParamField path="isMultiCam" type="boolean" required>
+  Whether this is a virtual multi-camera device consisting of multiple physical cameras.
+</ParamField>
+
+<ParamField path="minZoom" type="number" required>
+  The minimum zoom factor. For multi-cameras this is the point at which the widest lens is used.
+</ParamField>
+
+<ParamField path="maxZoom" type="number" required>
+  The maximum zoom factor. For multi-cameras this is the point at which the narrowest lens is used.
+</ParamField>
+
+<ParamField path="neutralZoom" type="number" required>
+  The zoom factor at which the "default" (wide-angle) camera is active. Use this as the initial value for animated zoom.
+</ParamField>
+
+<ParamField path="hasFlash" type="boolean" required>
+  Whether this camera supports enabling the flash for photo capture.
+</ParamField>
+
+<ParamField path="hasTorch" type="boolean" required>
+  Whether this camera supports keeping the flash on continuously as a torch during video capture.
+</ParamField>
+
+<ParamField path="formats" type="CameraDeviceFormat[]" required>
+  All stream-configuration formats this device supports. See [Camera formats](/guides/formats) for details.
+</ParamField>
+
+<ParamField path="supportsLowLightBoost" type="boolean" required>
+  Whether this camera supports low-light boost mode.
+</ParamField>
+
+<ParamField path="supportsFocus" type="boolean" required>
+  Whether this camera supports tap-to-focus via `Camera.focus()`.
+</ParamField>
+
+<ParamField path="sensorOrientation" type="Orientation" required>
+  The orientation of the camera sensor relative to the phone. Most sensors are in `landscape-left` orientation (rotated 90°), which means format resolutions are expressed in landscape coordinates (e.g. 3840×2160, not 2160×3840).
+</ParamField>
+
+<ParamField path="hardwareLevel" type="'legacy' | 'limited' | 'full'" required>
+  The hardware capability level of the camera. On Android, some older devices run in `legacy` or `limited` mode. On iOS all devices are `full`.
+</ParamField>
+
+## TypeScript signatures
+
+```ts
+export type CameraPosition = 'front' | 'back' | 'external'
+
+export type PhysicalCameraDeviceType =
+  | 'ultra-wide-angle-camera'
+  | 'wide-angle-camera'
+  | 'telephoto-camera'
+
+export interface DeviceFilter {
+  physicalDevices?: PhysicalCameraDeviceType[]
+}
+
+export function useCameraDevice(
+  position: CameraPosition,
+  filter?: DeviceFilter
+): CameraDevice | undefined
+
+export function getCameraDevice(
+  devices: CameraDevice[],
+  position: CameraPosition,
+  filter?: DeviceFilter
+): CameraDevice | undefined
+```

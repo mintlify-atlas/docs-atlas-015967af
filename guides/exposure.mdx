@@ -1,0 +1,93 @@
+---
+title: Exposure
+description: Adjust the camera's exposure compensation bias to make images brighter or darker.
+---
+
+## How exposure compensation works
+
+The `exposure` prop sets an **EV (exposure value) compensation bias** on the camera. Rather than locking the exposure to a fixed value, it shifts the camera's continuous auto-exposure by the given amount.
+
+The camera continues to auto-adjust ISO and shutter speed in response to lighting conditions, but premultiplies every auto-exposure decision by the compensation value you provide. A negative value produces darker images; a positive value produces brighter ones.
+
+| `exposure={-2}` | `exposure={0}` | `exposure={2}` |
+|-----------------|----------------|----------------|
+| Under-exposed (darker) | Neutral (auto) | Over-exposed (brighter) |
+
+## The `exposure` prop
+
+```tsx
+<Camera
+  device={device}
+  isActive={true}
+  exposure={0}
+/>
+```
+
+<ParamField path="exposure" type="number">
+  Exposure compensation bias. Values range from `device.minExposure` to `device.maxExposure`. Defaults to `undefined` (neutral auto exposure).
+</ParamField>
+
+The valid range depends on the device:
+
+```ts
+// device.minExposure: number  (e.g. -8)
+// device.maxExposure: number  (e.g.  8)
+console.log(device.minExposure, device.maxExposure)
+```
+
+Passing `undefined` (the default) lets the camera manage exposure entirely automatically.
+
+## Animating exposure with Reanimated
+
+The `exposure` prop supports animation via `react-native-reanimated`. This is useful for building a smooth brightness slider.
+
+<Steps>
+  <Step title="Create an animated Camera component">
+    ```tsx
+    import Reanimated, { addWhitelistedNativeProps } from 'react-native-reanimated'
+    import { Camera } from 'react-native-vision-camera'
+
+    const ReanimatedCamera = Reanimated.createAnimatedComponent(Camera)
+    addWhitelistedNativeProps({ exposure: true })
+    ```
+  </Step>
+  <Step title="Map a slider value to the device's exposure range">
+    ```tsx
+    import { useSharedValue, useDerivedValue, interpolate } from 'react-native-reanimated'
+
+    // Slider goes from -1 to 1 (e.g. a Reanimated-driven PanGesture)
+    const exposureSlider = useSharedValue(0)
+
+    // Map -1..0..1  →  minExposure..0..maxExposure
+    const exposureValue = useDerivedValue(() => {
+      if (device == null) return 0
+      return interpolate(
+        exposureSlider.value,
+        [-1, 0, 1],
+        [device.minExposure, 0, device.maxExposure],
+      )
+    }, [exposureSlider, device])
+    ```
+  </Step>
+  <Step title="Pass it as an animated prop">
+    ```tsx
+    import { useAnimatedProps } from 'react-native-reanimated'
+
+    const animatedProps = useAnimatedProps(() => ({
+      exposure: exposureValue.value,
+    }), [exposureValue])
+
+    return (
+      <ReanimatedCamera
+        device={device}
+        isActive={true}
+        animatedProps={animatedProps}
+      />
+    )
+    ```
+  </Step>
+</Steps>
+
+<Tip>
+The same animation pattern applies to the `zoom` prop. See the [zooming guide](/guides/zooming) for a complete gesture-based zoom example you can adapt for exposure.
+</Tip>

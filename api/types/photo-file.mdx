@@ -1,0 +1,303 @@
+---
+title: 'PhotoFile'
+description: 'Types for captured photos and snapshot files, including take-photo and take-snapshot options.'
+---
+
+`PhotoFile` is returned by `Camera.takePhoto()` and describes the resulting JPEG (or RAW) file written to the device's temporary directory. `SnapshotFile` is the lighter-weight equivalent returned by `Camera.takeSnapshot()`.
+
+---
+
+## TakePhotoOptions
+
+Options passed to `Camera.takePhoto()`.
+
+<ResponseField name="flash" type="'on' | 'off' | 'auto'">
+  Controls the camera flash during capture.
+
+  - `'on'`: Flash always fires.
+  - `'off'`: Flash never fires.
+  - `'auto'`: Flash fires when the scene is too dark.
+
+  **Default:** `'off'`
+</ResponseField>
+
+<ResponseField name="path" type="string">
+  A custom directory path where the photo will be saved. VisionCamera generates a unique filename inside this directory. The directory must already exist, otherwise an error is thrown.
+
+  **Default:** The device's temporary directory.
+</ResponseField>
+
+<ResponseField name="enableAutoRedEyeReduction" type="boolean">
+  Whether red-eye reduction should be applied automatically on flash captures.
+
+  <Note>iOS only.</Note>
+
+  **Default:** `false`
+</ResponseField>
+
+<ResponseField name="enableAutoDistortionCorrection" type="boolean">
+  Whether content-aware lens distortion correction should be applied. The algorithm is selective — for example, faces near the center may not be corrected while faces near the edges are.
+
+  <Note>iOS only.</Note>
+
+  **Default:** `false`
+</ResponseField>
+
+<ResponseField name="enableShutterSound" type="boolean">
+  Whether to play the default shutter "click" sound when taking a photo.
+
+  **Default:** `true`
+</ResponseField>
+
+---
+
+## TakeSnapshotOptions
+
+Options passed to `Camera.takeSnapshot()`. Snapshots are faster than full photo captures because they grab a frame directly from the preview stream.
+
+<ResponseField name="quality" type="number">
+  JPEG encoding quality from `0` (lowest) to `100` (highest). Lower values produce smaller files but more compression artifacts.
+
+  **Default:** `100`
+</ResponseField>
+
+<ResponseField name="path" type="string">
+  A custom directory path where the snapshot will be saved. VisionCamera generates a unique filename inside this directory. The directory must already exist, otherwise an error is thrown.
+
+  **Default:** The device's temporary directory.
+</ResponseField>
+
+---
+
+## PhotoFile
+
+Returned by `Camera.takePhoto()`. Extends `TemporaryFile`.
+
+<ResponseField name="path" type="string" required>
+  The file-system path of the captured photo.
+
+  <Note>
+    When displaying the photo in an `<Image>` component you may need to prepend `file://` to this path.
+    The file lives in the temporary directory and may be deleted when the app is closed.
+  </Note>
+</ResponseField>
+
+<ResponseField name="width" type="number" required>
+  The width of the captured photo, in pixels.
+</ResponseField>
+
+<ResponseField name="height" type="number" required>
+  The height of the captured photo, in pixels.
+</ResponseField>
+
+<ResponseField name="isRawPhoto" type="boolean" required>
+  Whether this photo was captured in RAW format. When `true`, you should process the file with a RAW-capable library rather than a standard JPEG decoder.
+</ResponseField>
+
+<ResponseField name="orientation" type="Orientation" required>
+  The display orientation of the photo relative to the camera sensor. Because camera sensors are mounted in landscape, a portrait photo will typically have an orientation of `'landscape-left'`.
+</ResponseField>
+
+<ResponseField name="isMirrored" type="boolean" required>
+  Whether the photo is horizontally mirrored. This is typically `true` for front-facing (selfie) captures.
+</ResponseField>
+
+<ResponseField name="thumbnail" type="Record<string, unknown>">
+  An optional embedded thumbnail for the photo. The structure depends on the platform.
+</ResponseField>
+
+<ResponseField name="metadata" type="object">
+  EXIF and other capture metadata. Available on iOS only (see [AVCapturePhoto.metadata](https://developer.apple.com/documentation/avfoundation/avcapturephoto/2873982-metadata)).
+
+  <Note>iOS only.</Note>
+
+  <Expandable title="metadata properties">
+    <ResponseField name="Orientation" type="number" required>
+      EXIF orientation tag.
+
+      | Value | Meaning |
+      |---|---|
+      | `1` | 0° — correct orientation, no adjustment needed |
+      | `2` | 0°, mirrored — flipped back-to-front |
+      | `3` | 180° — upside down |
+      | `4` | 180°, mirrored — flipped and upside down |
+      | `5` | 90° — flipped and on its side |
+      | `6` | 90°, mirrored — on its side |
+      | `7` | 270° — flipped and on its far side |
+      | `8` | 270°, mirrored — on its far side |
+    </ResponseField>
+
+    <ResponseField name="DPIHeight" type="number" required>
+      Vertical resolution in dots per inch.
+    </ResponseField>
+
+    <ResponseField name="DPIWidth" type="number" required>
+      Horizontal resolution in dots per inch.
+    </ResponseField>
+
+    <ResponseField name="'{MakerApple}'" type="Record<string, unknown>">
+      Proprietary Apple camera metadata, when present.
+    </ResponseField>
+
+    <ResponseField name="'{TIFF}'" type="object" required>
+      TIFF metadata block.
+
+      <Expandable title="TIFF properties">
+        <ResponseField name="ResolutionUnit" type="number" required>
+          Unit of measurement for `XResolution` and `YResolution` (2 = inches, 3 = centimeters).
+        </ResponseField>
+        <ResponseField name="Software" type="string" required>
+          Software that produced the image.
+        </ResponseField>
+        <ResponseField name="Make" type="string" required>
+          Camera manufacturer.
+        </ResponseField>
+        <ResponseField name="DateTime" type="string" required>
+          Date and time the image was last modified.
+        </ResponseField>
+        <ResponseField name="XResolution" type="number" required>
+          Horizontal resolution.
+        </ResponseField>
+        <ResponseField name="HostComputer" type="string">
+          Name of the host computer. iOS only.
+        </ResponseField>
+        <ResponseField name="Model" type="string" required>
+          Camera model name.
+        </ResponseField>
+        <ResponseField name="YResolution" type="number" required>
+          Vertical resolution.
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+
+    <ResponseField name="'{Exif}'" type="object" required>
+      Standard EXIF metadata block.
+
+      <Expandable title="Exif properties">
+        <ResponseField name="DateTimeOriginal" type="string" required>
+          Date and time the photo was originally taken.
+        </ResponseField>
+        <ResponseField name="ExposureTime" type="number" required>
+          Shutter speed in seconds (e.g. `0.001` for 1/1000s).
+        </ResponseField>
+        <ResponseField name="FNumber" type="number" required>
+          Aperture f-number (e.g. `1.8`).
+        </ResponseField>
+        <ResponseField name="LensSpecification" type="number[]" required>
+          Min focal length, max focal length, min f-number, max f-number.
+        </ResponseField>
+        <ResponseField name="ExposureBiasValue" type="number" required>
+          Exposure compensation in EV steps.
+        </ResponseField>
+        <ResponseField name="ColorSpace" type="number" required>
+          Color space identifier (1 = sRGB).
+        </ResponseField>
+        <ResponseField name="FocalLenIn35mmFilm" type="number" required>
+          Equivalent focal length in 35mm film terms.
+        </ResponseField>
+        <ResponseField name="BrightnessValue" type="number" required>
+          Scene luminance in APEX units.
+        </ResponseField>
+        <ResponseField name="ExposureMode" type="number" required>
+          Exposure mode (0 = auto, 1 = manual, 2 = auto bracket).
+        </ResponseField>
+        <ResponseField name="LensModel" type="string" required>
+          Lens model name.
+        </ResponseField>
+        <ResponseField name="SceneType" type="number" required>
+          Scene capture type.
+        </ResponseField>
+        <ResponseField name="PixelXDimension" type="number" required>
+          Valid image width in pixels.
+        </ResponseField>
+        <ResponseField name="ShutterSpeedValue" type="number" required>
+          Shutter speed in APEX units.
+        </ResponseField>
+        <ResponseField name="SensingMethod" type="number" required>
+          Image sensor type.
+        </ResponseField>
+        <ResponseField name="SubjectArea" type="number[]" required>
+          Location of the main subject within the image.
+        </ResponseField>
+        <ResponseField name="ApertureValue" type="number" required>
+          Lens aperture in APEX units.
+        </ResponseField>
+        <ResponseField name="SubsecTimeDigitized" type="string" required>
+          Fractional seconds for `DateTimeDigitized`.
+        </ResponseField>
+        <ResponseField name="FocalLength" type="number" required>
+          Actual focal length of the lens, in millimeters.
+        </ResponseField>
+        <ResponseField name="LensMake" type="string" required>
+          Lens manufacturer.
+        </ResponseField>
+        <ResponseField name="SubsecTimeOriginal" type="string" required>
+          Fractional seconds for `DateTimeOriginal`.
+        </ResponseField>
+        <ResponseField name="OffsetTimeDigitized" type="string" required>
+          UTC offset for `DateTimeDigitized`.
+        </ResponseField>
+        <ResponseField name="PixelYDimension" type="number" required>
+          Valid image height in pixels.
+        </ResponseField>
+        <ResponseField name="ISOSpeedRatings" type="number[]" required>
+          ISO sensitivity value(s).
+        </ResponseField>
+        <ResponseField name="WhiteBalance" type="number" required>
+          White balance mode (0 = auto, 1 = manual).
+        </ResponseField>
+        <ResponseField name="DateTimeDigitized" type="string" required>
+          Date and time the image was digitized.
+        </ResponseField>
+        <ResponseField name="OffsetTimeOriginal" type="string" required>
+          UTC offset for `DateTimeOriginal`.
+        </ResponseField>
+        <ResponseField name="ExifVersion" type="string" required>
+          EXIF standard version (e.g. `"0232"`).
+        </ResponseField>
+        <ResponseField name="OffsetTime" type="string" required>
+          UTC offset for the file modification `DateTime`.
+        </ResponseField>
+        <ResponseField name="Flash" type="number" required>
+          Flash status and mode flags.
+        </ResponseField>
+        <ResponseField name="ExposureProgram" type="number" required>
+          Exposure program used (1 = manual, 2 = normal program, etc.).
+        </ResponseField>
+        <ResponseField name="MeteringMode" type="number" required>
+          Metering mode (1 = average, 2 = center-weighted, etc.).
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+---
+
+## SnapshotFile
+
+Returned by `Camera.takeSnapshot()`. A subset of `PhotoFile` containing only the fields available from the preview stream.
+
+```ts
+type SnapshotFile = Pick<PhotoFile, 'path' | 'width' | 'height' | 'orientation' | 'isMirrored'>
+```
+
+<ResponseField name="path" type="string" required>
+  File-system path to the saved JPEG. Prepend `file://` when using with `<Image>`.
+</ResponseField>
+
+<ResponseField name="width" type="number" required>
+  Width of the snapshot image, in pixels.
+</ResponseField>
+
+<ResponseField name="height" type="number" required>
+  Height of the snapshot image, in pixels.
+</ResponseField>
+
+<ResponseField name="orientation" type="Orientation" required>
+  Display orientation of the snapshot relative to the camera sensor.
+</ResponseField>
+
+<ResponseField name="isMirrored" type="boolean" required>
+  Whether the snapshot is horizontally mirrored (e.g. from a front-facing camera).
+</ResponseField>

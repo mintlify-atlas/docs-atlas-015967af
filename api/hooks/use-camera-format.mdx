@@ -1,0 +1,174 @@
+---
+title: "useCameraFormat"
+description: "Hook to select the best camera format for a device based on a prioritized list of filter criteria."
+---
+
+```ts
+import { useCameraFormat } from 'react-native-vision-camera'
+```
+
+## Signature
+
+```ts
+useCameraFormat(
+  device: CameraDevice | undefined,
+  filters: FormatFilter[]
+): CameraDeviceFormat | undefined
+```
+
+`useCameraFormat` evaluates every format supported by `device` using a weighted point-scoring system and returns the one that best satisfies your criteria. Pass the result directly to the `<Camera format={...} />` prop.
+
+---
+
+## Parameters
+
+<ParamField body="device" type="CameraDevice | undefined" required>
+  The camera device whose formats you want to evaluate. Pass the value returned by `useCameraDevice`. If `undefined`, the hook immediately returns `undefined`.
+</ParamField>
+
+<ParamField body="filters" type="FormatFilter[]" required>
+  An ordered array of filter criteria. **Filters are ranked by priority from first to last** — the first entry in the array carries the highest weight. Each filter is an object with one or more of the following properties:
+
+  <Expandable title="FormatFilter">
+    <ParamField body="videoResolution" type='{ width: number; height: number } | "max"' optional>
+      Target resolution for the video (and Frame Processor) pipeline. Use `'max'` to request the highest available resolution, or provide an exact `{ width, height }` — the closest match is selected.
+    </ParamField>
+    <ParamField body="photoResolution" type='{ width: number; height: number } | "max"' optional>
+      Target resolution for the photo pipeline. Same semantics as `videoResolution`.
+    </ParamField>
+    <ParamField body="fps" type='number | "max"' optional>
+      Target frame rate. Use `'max'` for the highest supported FPS, or a specific number. The format with the closest `maxFps` is selected.
+    </ParamField>
+    <ParamField body="videoAspectRatio" type="number" optional>
+      Target video aspect ratio expressed as `width / height` (cameras are landscape). Pass `screen.height / screen.width` to match a portrait screen.
+    </ParamField>
+    <ParamField body="photoAspectRatio" type="number" optional>
+      Target photo aspect ratio expressed as `width / height`.
+    </ParamField>
+    <ParamField body="videoStabilizationMode" type="VideoStabilizationMode" optional>
+      The desired video stabilization mode. Formats that support the requested mode score higher.
+    </ParamField>
+    <ParamField body="photoHdr" type="boolean" optional>
+      Whether to prefer a format that supports Photo HDR.
+    </ParamField>
+    <ParamField body="videoHdr" type="boolean" optional>
+      Whether to prefer a format that supports Video HDR.
+    </ParamField>
+    <ParamField body="iso" type='number | "max" | "min"' optional>
+      Target ISO sensitivity value. Use `'max'` or `'min'` to prefer the highest or lowest supported ISO.
+    </ParamField>
+    <ParamField body="autoFocusSystem" type="AutoFocusSystem" optional>
+      Preferred auto-focus system: `'phase-detection'`, `'contrast-detection'`, or `'none'`.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+---
+
+## Return Value
+
+<ResponseField name="format" type="CameraDeviceFormat | undefined">
+  The `CameraDeviceFormat` that best matches your filters, or `undefined` if `device` is `undefined`. The returned format can be passed directly to the `<Camera format={...} />` prop.
+
+  <Expandable title="CameraDeviceFormat">
+    <ResponseField name="videoWidth" type="number">Width of the video pipeline in pixels.</ResponseField>
+    <ResponseField name="videoHeight" type="number">Height of the video pipeline in pixels.</ResponseField>
+    <ResponseField name="photoWidth" type="number">Width of the photo pipeline in pixels.</ResponseField>
+    <ResponseField name="photoHeight" type="number">Height of the photo pipeline in pixels.</ResponseField>
+    <ResponseField name="minFps" type="number">Minimum supported frame rate for this format.</ResponseField>
+    <ResponseField name="maxFps" type="number">Maximum supported frame rate for this format.</ResponseField>
+    <ResponseField name="minISO" type="number">Minimum supported ISO value.</ResponseField>
+    <ResponseField name="maxISO" type="number">Maximum supported ISO value.</ResponseField>
+    <ResponseField name="fieldOfView" type="number">Video field of view in degrees.</ResponseField>
+    <ResponseField name="supportsVideoHdr" type="boolean">Whether Video HDR is supported.</ResponseField>
+    <ResponseField name="supportsPhotoHdr" type="boolean">Whether Photo HDR is supported.</ResponseField>
+    <ResponseField name="supportsDepthCapture" type="boolean">Whether depth data delivery is supported.</ResponseField>
+    <ResponseField name="autoFocusSystem" type="AutoFocusSystem">The auto-focus system used by this format.</ResponseField>
+    <ResponseField name="videoStabilizationModes" type="VideoStabilizationMode[]">The video stabilization modes supported by this format.</ResponseField>
+  </Expandable>
+</ResponseField>
+
+---
+
+## Priority Ordering
+
+When you pass multiple filters, the **first filter in the array has the highest priority**. For example, the following configuration prioritizes 4K video resolution above 60 FPS:
+
+```ts
+const format = useCameraFormat(device, [
+  { videoResolution: { width: 3840, height: 2160 } }, // highest priority
+  { fps: 60 },                                         // lower priority
+])
+```
+
+If no format satisfies both, the algorithm picks the one that scores best overall given the relative weights.
+
+---
+
+## Predefined Templates
+
+The `Templates` object provides commonly used filter arrays. Import it alongside the hook:
+
+```ts
+import { useCameraFormat, Templates } from 'react-native-vision-camera'
+```
+
+| Template | Filters |
+|---|---|
+| `Templates.Video` | Max video resolution |
+| `Templates.Video60Fps` | 60 FPS, then max video resolution |
+| `Templates.VideoSlowMotion` | 240 FPS, then max video resolution |
+| `Templates.VideoStabilized` | Max video resolution + cinematic-extended stabilization |
+| `Templates.Photo` | Max photo resolution |
+| `Templates.PhotoPortrait` | Max photo resolution + portrait aspect ratio |
+| `Templates.FrameProcessing` | 1080×720 video resolution (fast for ML) |
+| `Templates.Snapchat` | Portrait aspect ratio, 1920×1080 |
+| `Templates.Instagram` | Portrait aspect ratio, 3840×2160 (4K) |
+
+```tsx
+const format = useCameraFormat(device, Templates.Snapchat)
+```
+
+---
+
+## Examples
+
+### 4K video at 60 FPS
+
+```tsx
+const device = useCameraDevice('back')
+const format = useCameraFormat(device, [
+  { videoResolution: { width: 3840, height: 2160 } },
+  { fps: 60 },
+])
+
+return <Camera device={device} format={format} fps={60} isActive={true} />
+```
+
+### Slow-motion at 240 FPS
+
+```tsx
+const format = useCameraFormat(device, Templates.VideoSlowMotion)
+
+return <Camera device={device} format={format} fps={240} isActive={true} />
+```
+
+### Screen-matched aspect ratio
+
+```tsx
+import { Dimensions } from 'react-native'
+
+const screen = Dimensions.get('screen')
+const format = useCameraFormat(device, [
+  { videoAspectRatio: screen.height / screen.width },
+  { videoResolution: 'max' },
+])
+```
+
+---
+
+## Notes
+
+- The hook is memoized; it re-runs only when `device` or `filters` (deep-compared via `JSON.stringify`) change.
+- When `device` is `undefined`, the hook returns `undefined` without error.
+- Formats within a single device are fixed and do not change at runtime, so the memoization is very efficient.

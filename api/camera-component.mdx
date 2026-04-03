@@ -1,0 +1,432 @@
+---
+title: "<Camera>"
+description: "API reference for the Camera React component, including all instance methods and static methods."
+---
+
+The `<Camera>` component is the main entry point for capturing photos, recording video, scanning codes, and processing frames. It extends React Native's `ViewProps`, so all standard view props (e.g. `style`) are accepted.
+
+```tsx
+import { Camera } from 'react-native-vision-camera'
+```
+
+## Usage
+
+```tsx
+import { Camera, useCameraDevice } from 'react-native-vision-camera'
+import { StyleSheet } from 'react-native'
+
+function App() {
+  const device = useCameraDevice('back')
+
+  if (device == null) return null
+
+  return (
+    <Camera
+      style={StyleSheet.absoluteFill}
+      device={device}
+      isActive={true}
+    />
+  )
+}
+```
+
+---
+
+## Instance Methods
+
+Call these methods via a `ref` attached to the `<Camera>` component.
+
+```tsx
+const cameraRef = useRef<Camera>(null)
+// ...
+await cameraRef.current.takePhoto()
+```
+
+### takePhoto
+
+```ts
+takePhoto(options?: TakePhotoOptions): Promise<PhotoFile>
+```
+
+Captures a single photo and writes it to a temporary file.
+
+<ParamField body="options" type="TakePhotoOptions" optional>
+  <Expandable title="TakePhotoOptions">
+    <ParamField body="flash" type='"on" | "off" | "auto"' default='"off"'>
+      Whether the flash should be enabled or disabled during capture.
+    </ParamField>
+    <ParamField body="path" type="string" optional>
+      A custom directory path where the photo will be saved. VisionCamera generates the filename. Defaults to the device's temporary directory.
+    </ParamField>
+    <ParamField body="enableAutoRedEyeReduction" type="boolean" default="false">
+      Whether red-eye reduction should be applied automatically on flash captures. iOS only.
+    </ParamField>
+    <ParamField body="enableAutoDistortionCorrection" type="boolean" default="false">
+      Whether content-aware distortion correction should be applied. iOS only.
+    </ParamField>
+    <ParamField body="enableShutterSound" type="boolean" default="true">
+      Whether to play the default shutter sound when taking a picture.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ResponseField name="returns" type="Promise<PhotoFile>">
+  Resolves with a `PhotoFile` object describing the captured photo.
+
+  <Expandable title="PhotoFile">
+    <ResponseField name="path" type="string">
+      The path to the photo file on the local filesystem.
+    </ResponseField>
+    <ResponseField name="width" type="number">
+      The width of the photo in pixels.
+    </ResponseField>
+    <ResponseField name="height" type="number">
+      The height of the photo in pixels.
+    </ResponseField>
+    <ResponseField name="isRawPhoto" type="boolean">
+      Whether this photo is in RAW format.
+    </ResponseField>
+    <ResponseField name="orientation" type="Orientation">
+      Display orientation of the photo, relative to the camera's sensor orientation.
+    </ResponseField>
+    <ResponseField name="isMirrored" type="boolean">
+      Whether this photo is mirrored (e.g. selfie camera).
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+Throws a `CameraCaptureError` if any error occurs during capture.
+
+```ts
+const photo = await cameraRef.current.takePhoto({
+  flash: 'on',
+  enableAutoRedEyeReduction: true,
+})
+console.log(photo.path)
+```
+
+---
+
+### takeSnapshot
+
+```ts
+takeSnapshot(options?: TakeSnapshotOptions): Promise<PhotoFile>
+```
+
+Captures a snapshot of the Camera view and writes it to a temporary file.
+
+- On **iOS**, `takeSnapshot` waits for a frame from the video pipeline and requires `video` to be enabled.
+- On **Android**, `takeSnapshot` performs a GPU screenshot from the preview view.
+
+<ParamField body="options" type="TakeSnapshotOptions" optional>
+  <Expandable title="TakeSnapshotOptions">
+    <ParamField body="quality" type="number" optional>
+      The quality of the snapshot, from `0` (lowest) to `100` (highest).
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ResponseField name="returns" type="Promise<PhotoFile>">
+  Resolves with a `PhotoFile` describing the captured snapshot.
+</ResponseField>
+
+Throws a `CameraCaptureError` if any error occurs.
+
+```ts
+const snapshot = await cameraRef.current.takeSnapshot({ quality: 85 })
+```
+
+---
+
+### startRecording
+
+```ts
+startRecording(options: RecordVideoOptions): void
+```
+
+Starts a new video recording. This method is **not** async — the recording runs until you call `stopRecording()`, `pauseRecording()`, or `cancelRecording()`.
+
+<ParamField body="options" type="RecordVideoOptions" required>
+  <Expandable title="RecordVideoOptions">
+    <ParamField body="onRecordingFinished" type="(video: VideoFile) => void" required>
+      Called when the recording has been successfully saved to file.
+    </ParamField>
+    <ParamField body="onRecordingError" type="(error: CameraCaptureError) => void" required>
+      Called when an unexpected runtime error occurs during recording.
+    </ParamField>
+    <ParamField body="flash" type='"on" | "off"' optional>
+      Enables the torch (flashlight) during recording.
+    </ParamField>
+    <ParamField body="fileType" type='"mov" | "mp4"' optional>
+      The output file container format.
+    </ParamField>
+    <ParamField body="path" type="string" optional>
+      A custom directory path where the video will be saved.
+    </ParamField>
+    <ParamField body="videoCodec" type='"h264" | "h265"' optional>
+      The video codec to encode with. `h265` (HEVC) produces up to 50% smaller files.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+Throws a `CameraCaptureError` if recording fails to start.
+
+```ts
+cameraRef.current.startRecording({
+  onRecordingFinished: (video) => console.log(video.path),
+  onRecordingError: (error) => console.error(error),
+})
+
+setTimeout(() => {
+  cameraRef.current.stopRecording()
+}, 5000)
+```
+
+---
+
+### stopRecording
+
+```ts
+stopRecording(): Promise<void>
+```
+
+Stops the current video recording. The recorded video is delivered via the `onRecordingFinished` callback passed to `startRecording`.
+
+Throws a `CameraCaptureError` if stopping fails.
+
+---
+
+### pauseRecording
+
+```ts
+pauseRecording(): Promise<void>
+```
+
+Pauses the current video recording. Resume with `resumeRecording()`.
+
+Throws a `CameraCaptureError` if pausing fails.
+
+---
+
+### resumeRecording
+
+```ts
+resumeRecording(): Promise<void>
+```
+
+Resumes a previously paused video recording.
+
+Throws a `CameraCaptureError` if resuming fails.
+
+---
+
+### cancelRecording
+
+```ts
+cancelRecording(): Promise<void>
+```
+
+Cancels the current video recording. The temporary file is deleted, and `onRecordingError` is invoked with a `capture/recording-canceled` error.
+
+```ts
+cameraRef.current.startRecording({
+  onRecordingFinished: (video) => console.log(video),
+  onRecordingError: (error) => {
+    if (error.code === 'capture/recording-canceled') {
+      // Recording was canceled — this is expected.
+    } else {
+      console.error(error)
+    }
+  },
+})
+
+setTimeout(() => {
+  cameraRef.current.cancelRecording()
+}, 5000)
+```
+
+---
+
+### focus
+
+```ts
+focus(point: Point): Promise<void>
+```
+
+Focuses the camera to a specific point in the view's coordinate system.
+
+<ParamField body="point" type="Point" required>
+  <Expandable title="Point">
+    <ParamField body="x" type="number" required>
+      The X coordinate in points. `0` is the left edge of the Camera view.
+    </ParamField>
+    <ParamField body="y" type="number" required>
+      The Y coordinate in points. `0` is the top edge of the Camera view.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+The point must not exceed the Camera view's dimensions. `(0, 0)` is top-left; `(width, height)` is bottom-right.
+
+Throws a `CameraRuntimeError` if focusing fails.
+
+```ts
+await cameraRef.current.focus({ x: tapEvent.x, y: tapEvent.y })
+```
+
+---
+
+## Static Methods
+
+These methods are called directly on the `Camera` class, not on a ref instance.
+
+### Camera.getAvailableCameraDevices
+
+```ts
+Camera.getAvailableCameraDevices(): CameraDevice[]
+```
+
+Returns all available camera devices on the current device. For built-in cameras this list is stable; for external cameras (USB, continuity) use `addCameraDevicesChangedListener` to track changes.
+
+<ResponseField name="returns" type="CameraDevice[]">
+  An array of all currently available camera devices.
+</ResponseField>
+
+```ts
+const devices = Camera.getAvailableCameraDevices()
+const backCameras = devices.filter((d) => d.position === 'back')
+```
+
+---
+
+### Camera.addCameraDevicesChangedListener
+
+```ts
+Camera.addCameraDevicesChangedListener(
+  listener: (newDevices: CameraDevice[]) => void
+): EmitterSubscription
+```
+
+Subscribes to camera device changes, for example when an external camera is plugged in or out.
+
+<ParamField body="listener" type="(newDevices: CameraDevice[]) => void" required>
+  Called with the updated list of available camera devices whenever the list changes.
+</ParamField>
+
+<ResponseField name="returns" type="EmitterSubscription">
+  Call `.remove()` on the returned subscription to unsubscribe.
+</ResponseField>
+
+```ts
+const subscription = Camera.addCameraDevicesChangedListener((devices) => {
+  console.log('Devices changed:', devices)
+})
+
+// Later:
+subscription.remove()
+```
+
+---
+
+### Camera.getCameraPermissionStatus
+
+```ts
+Camera.getCameraPermissionStatus(): CameraPermissionStatus
+```
+
+Returns the current camera permission status. Check this before mounting `<Camera>`.
+
+<ResponseField name="returns" type="CameraPermissionStatus">
+  One of `'granted'`, `'not-determined'`, `'denied'`, or `'restricted'`.
+</ResponseField>
+
+---
+
+### Camera.requestCameraPermission
+
+```ts
+Camera.requestCameraPermission(): Promise<CameraPermissionRequestResult>
+```
+
+Prompts the user to grant camera permission. If the user has previously denied permission, the system dialog will not appear and `'denied'` is returned immediately.
+
+<ResponseField name="returns" type='Promise<"granted" | "denied">'>
+  Resolves with the updated permission result.
+</ResponseField>
+
+---
+
+### Camera.getMicrophonePermissionStatus
+
+```ts
+Camera.getMicrophonePermissionStatus(): CameraPermissionStatus
+```
+
+Returns the current microphone permission status. Check this before enabling `audio={true}`.
+
+<ResponseField name="returns" type="CameraPermissionStatus">
+  One of `'granted'`, `'not-determined'`, `'denied'`, or `'restricted'`.
+</ResponseField>
+
+---
+
+### Camera.requestMicrophonePermission
+
+```ts
+Camera.requestMicrophonePermission(): Promise<CameraPermissionRequestResult>
+```
+
+Prompts the user to grant microphone permission.
+
+<ResponseField name="returns" type='Promise<"granted" | "denied">'>
+  Resolves with the updated permission result.
+</ResponseField>
+
+---
+
+### Camera.getLocationPermissionStatus
+
+```ts
+Camera.getLocationPermissionStatus(): CameraPermissionStatus
+```
+
+Returns the current location permission status. Check this before enabling `enableLocation={true}`.
+
+Throws a `system/location-not-enabled` error if Location APIs are not enabled at build-time.
+
+<ResponseField name="returns" type="CameraPermissionStatus">
+  One of `'granted'`, `'not-determined'`, `'denied'`, or `'restricted'`.
+</ResponseField>
+
+---
+
+### Camera.requestLocationPermission
+
+```ts
+Camera.requestLocationPermission(): Promise<CameraPermissionRequestResult>
+```
+
+Prompts the user to grant location permission.
+
+<ResponseField name="returns" type='Promise<"granted" | "denied">'>
+  Resolves with the updated permission result.
+</ResponseField>
+
+---
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="CameraProps" icon="sliders" href="/api/camera-props">
+    All props accepted by the Camera component.
+  </Card>
+  <Card title="useCameraDevice" icon="mobile" href="/api/hooks/use-camera-device">
+    Hook for selecting a camera device.
+  </Card>
+  <Card title="Camera errors" icon="triangle-exclamation" href="/guides/errors">
+    Error codes and how to handle them.
+  </Card>
+  <Card title="Taking photos" icon="camera" href="/guides/taking-photos">
+    Guide to photo capture with VisionCamera.
+  </Card>
+</CardGroup>

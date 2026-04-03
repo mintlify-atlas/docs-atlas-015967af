@@ -1,0 +1,114 @@
+---
+title: HDR
+description: Capture photos and videos in High Dynamic Range for wider color gamuts and better detail in highlights and shadows.
+---
+
+## What is HDR?
+
+HDR (High Dynamic Range) is a capture mode that records colors in a much wider range than standard dynamic range (SDR), producing better detail in both bright highlights and dark shadows.
+
+| Standard Dynamic Range (SDR) | High Dynamic Range (HDR) |
+|------------------------------|--------------------------|
+| Clipped highlights, crushed shadows | Preserved detail throughout the tonal range |
+
+VisionCamera supports two independent HDR modes:
+
+- **`photoHdr`** — HDR for still photo capture
+- **`videoHdr`** — HDR for video recording and frame processor streams
+
+### Photo HDR
+
+Photo HDR works by running three captures in rapid succession: one underexposed, one normally exposed, and one overexposed. These frames are then fused together to produce darker darks and brighter brights in a single image.
+
+### Video HDR
+
+Video HDR uses a 10-bit HDR pixel format with custom hardware sensor configuration that allows for capturing a wider color range in every frame:
+
+- **iOS** — uses the `kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange` pixel format
+- **Android** — uses dynamic range formats `HLG10`, `HDR10`, or `DOLBY_VISION_10B_HDR_OEM`
+
+<Note>
+If true 10-bit Video HDR is unavailable, the OS may fall back to EDR (Extended Dynamic Range), which doubles the frame rate and combines a longer-exposed and a shorter-exposed frame — similar to how Photo HDR works.
+</Note>
+
+## Checking HDR support
+
+HDR availability depends on the device and the selected format. Before enabling HDR props, check whether the chosen format supports them:
+
+```ts
+// supportsVideoHdr: boolean
+// supportsPhotoHdr: boolean
+const supportsVideoHdr = format.supportsVideoHdr
+const supportsPhotoHdr = format.supportsPhotoHdr
+```
+
+<Warning>
+Enabling `videoHdr` or `photoHdr` when the selected format does not support it will throw a runtime error. Always guard with the format's `supportsVideoHdr` / `supportsPhotoHdr` flags.
+</Warning>
+
+## Selecting an HDR format
+
+Use `useCameraFormat` (or `getCameraFormat`) to find a format that supports your desired HDR mode:
+
+<CodeGroup>
+
+```ts hooks
+import { useCameraFormat } from 'react-native-vision-camera'
+
+const format = useCameraFormat(device, [
+  { photoHdr: true },
+  { videoHdr: true },
+])
+```
+
+```ts imperative
+import { getCameraFormat } from 'react-native-vision-camera'
+
+const format = getCameraFormat(device, [
+  { photoHdr: true },
+  { videoHdr: true },
+])
+```
+
+</CodeGroup>
+
+The format selector finds the best-matching format. If a format that satisfies all constraints is not available, it falls back to the closest match.
+
+## Enabling HDR capture
+
+Once you have a format, pass it to the `<Camera>` component and enable the HDR props conditionally based on what the format supports:
+
+```tsx
+const format = useCameraFormat(device, [
+  { photoHdr: true },
+  { videoHdr: true },
+])
+
+return (
+  <Camera
+    device={device}
+    isActive={true}
+    format={format}
+    photo={true}
+    video={true}
+    videoHdr={format?.supportsVideoHdr}
+    photoHdr={format?.supportsPhotoHdr}
+  />
+)
+```
+
+With `videoHdr` enabled, all frames delivered to frame processors will also use the 10-bit HDR pixel format.
+
+<Tip>
+On Android, `photoHdr` uses a vendor-specific "HDR" extension that is **not** compatible with `videoHdr`. Only one of the two can be active at a time on Android — choose the mode that fits your use case.
+</Tip>
+
+## Device compatibility
+
+HDR support varies significantly across devices:
+
+- **iOS** — Video HDR is available on iPhone 12 Pro and newer for the main wide-angle camera. HDR availability varies per format and camera.
+- **Android** — Support depends on the vendor and Camera2 hardware level. Check `format.supportsVideoHdr` and `format.supportsPhotoHdr` at runtime.
+- **Low-end devices** — HDR formats may not be listed at all. Your format selector will silently fall back to a non-HDR format.
+
+Always check `format.supportsVideoHdr` and `format.supportsPhotoHdr` before rendering HDR-dependent UI or enabling HDR props.

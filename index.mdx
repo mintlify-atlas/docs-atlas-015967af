@@ -1,97 +1,128 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: "VisionCamera"
+description: "A powerful, high-performance camera library for React Native. Capture photos and videos, scan QR codes, and run realtime frame processors — all with native performance."
 ---
 
-## Setting up
+VisionCamera gives you full control over the camera in your React Native app. Built with native iOS (Swift) and Android (Kotlin) code, it exposes a clean TypeScript API for capturing media, scanning codes, and running realtime AI/ML workloads on every camera frame.
 
-Get your documentation site up and running in minutes.
-
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
-
-## Make it yours
-
-Design a docs site that looks great and empowers your users.
-
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
+<CardGroup cols={2}>
+  <Card title="Getting Started" icon="rocket" href="/guides/getting-started">
+    Install VisionCamera and display your first camera preview in minutes.
   </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
+  <Card title="Camera Devices" icon="camera" href="/guides/devices">
+    Select from front, back, wide-angle, telephoto, and external cameras.
   </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
+  <Card title="Taking Photos" icon="image" href="/guides/taking-photos">
+    Capture high-resolution photos with flash, HDR, and quality controls.
   </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
+  <Card title="Recording Videos" icon="video" href="/guides/recording-videos">
+    Record video with configurable codec, bitrate, and frame rate.
   </Card>
-</Columns>
+  <Card title="QR / Barcode Scanning" icon="qrcode" href="/guides/code-scanning">
+    Scan QR codes, barcodes, and more with native iOS and MLKit APIs.
+  </Card>
+  <Card title="Frame Processors" icon="microchip" href="/guides/frame-processors">
+    Run JS worklets on every camera frame at 60+ FPS for AI/ML processing.
+  </Card>
+</CardGroup>
 
-## Create beautiful pages
+## Quick example
 
-Everything you need to create world-class documentation.
+Mount a camera preview with just a few lines of TypeScript:
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
+```tsx
+import { Camera, useCameraDevice, useCameraPermission } from 'react-native-vision-camera'
+import { StyleSheet } from 'react-native'
 
-## Need inspiration?
+function App() {
+  const { hasPermission, requestPermission } = useCameraPermission()
+  const device = useCameraDevice('back')
 
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+  if (!hasPermission) return <PermissionsPage onPress={requestPermission} />
+  if (device == null) return <NoCameraDeviceError />
+
+  return (
+    <Camera
+      style={StyleSheet.absoluteFill}
+      device={device}
+      isActive={true}
+    />
+  )
+}
+```
+
+## Key features
+
+<CardGroup cols={2}>
+  <Card title="High-performance capture" icon="bolt">
+    GPU-accelerated video pipeline using OpenGL. Capture 4K/8K photos and up to 240 FPS slow-motion video.
+  </Card>
+  <Card title="Frame Processors" icon="wand-magic-sparkles">
+    Run JavaScript worklets directly on camera frames via JSI — no bridge overhead. Ideal for realtime ML, face detection, and AR filters.
+  </Card>
+  <Card title="Skia drawing" icon="paintbrush">
+    Draw shapes, text, and shader effects directly onto the camera preview using `@shopify/react-native-skia`.
+  </Card>
+  <Card title="Multi-camera support" icon="layer-group">
+    Use dual, triple, or external cameras. VisionCamera auto-selects the best device for your requirements.
+  </Card>
+  <Card title="QR & Barcode scanning" icon="barcode">
+    Detect QR, EAN, Code-128, Aztec, Data Matrix, and more — all in a single API call.
+  </Card>
+  <Card title="Expo support" icon="star">
+    Works with Expo managed workflow via the built-in config plugin. No ejecting required.
+  </Card>
+</CardGroup>
+
+## Installation
+
+<Steps>
+  <Step title="Install the package">
+    <CodeGroup>
+      ```bash npm
+      npm install react-native-vision-camera
+      ```
+      ```bash yarn
+      yarn add react-native-vision-camera
+      ```
+      ```bash expo
+      npx expo install react-native-vision-camera
+      ```
+    </CodeGroup>
+  </Step>
+  <Step title="Install iOS pods">
+    ```bash
+    cd ios && pod install
+    ```
+    <Note>Skip this step for Expo managed workflow.</Note>
+  </Step>
+  <Step title="Add permissions">
+    Add camera (and optionally microphone) permissions to your `Info.plist` (iOS) and `AndroidManifest.xml` (Android). See the [Getting Started guide](/guides/getting-started) for the exact XML snippets.
+  </Step>
+  <Step title="Mount your camera">
+    Use `useCameraDevice` and `useCameraPermission` hooks, then render the `<Camera>` component. See the [full guide](/guides/getting-started#use-the-camera-view) for a complete example.
+  </Step>
+</Steps>
+
+## Explore the docs
+
+<CardGroup cols={3}>
+  <Card title="Camera formats" icon="sliders" href="/guides/formats">
+    Configure resolution, FPS, HDR, and stabilization.
+  </Card>
+  <Card title="Zooming" icon="magnifying-glass" href="/guides/zooming">
+    Smooth pinch-to-zoom with Reanimated.
+  </Card>
+  <Card title="Exposure & Focus" icon="sun" href="/guides/exposure">
+    Manual exposure and tap-to-focus controls.
+  </Card>
+  <Card title="Orientation" icon="rotate" href="/guides/orientation">
+    Handle device and output orientation changes.
+  </Card>
+  <Card title="Performance tips" icon="gauge-high" href="/guides/performance">
+    Squeeze every last millisecond out of your pipeline.
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/camera-component">
+    Full TypeScript API reference for all exports.
+  </Card>
+</CardGroup>

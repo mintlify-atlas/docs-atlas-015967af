@@ -1,0 +1,152 @@
+---
+title: 'Frame'
+description: 'A single camera frame backed by a GPU buffer, used in frame processors.'
+---
+
+A `Frame` is a C++ JSI HostObject wrapping a native GPU buffer (`CVPixelBufferRef` on iOS, `AHardwareBuffer*` on Android). It is delivered to your frame processor on every camera tick.
+
+At 4K resolution a raw frame can be up to **12 MB**. Because `Frame` is a JSI object, accessing its properties involves no bridge serialization.
+
+```ts
+const frameProcessor = useFrameProcessor((frame) => {
+  'worklet'
+  console.log(`${frame.width}x${frame.height} (${frame.pixelFormat})`)
+}, [])
+```
+
+<Warning>
+  A `Frame` is only valid for the duration of the frame processor call (or a `runAsync` operation). Do not store references to frames beyond their valid lifetime — check `frame.isValid` before use.
+</Warning>
+
+---
+
+## PixelFormat
+
+The pixel encoding of the data inside a `Frame`. Choose a format compatible with your ML model or image processing library.
+
+```ts
+type PixelFormat = 'yuv' | 'rgb' | 'unknown'
+```
+
+| Value | Description |
+|---|---|
+| `'yuv'` | Y'CbCr 4:2:0 (NV21 on Android, 8-bit). Recommended for most ML models. |
+| `'rgb'` | RGBA or BGRA, 8-bit. Use when your pipeline requires interleaved RGB. |
+| `'unknown'` | An unsupported or unrecognized pixel format. |
+
+Configure the desired pixel format on the `<Camera>` component with the `pixelFormat` prop.
+
+---
+
+## Orientation
+
+The rotational state of a frame or sensor relative to portrait-up.
+
+```ts
+type Orientation =
+  | 'portrait'
+  | 'portrait-upside-down'
+  | 'landscape-left'
+  | 'landscape-right'
+```
+
+| Value | Degrees | Home button position |
+|---|---|---|
+| `'portrait'` | 0° | Bottom |
+| `'landscape-left'` | 90° | Left |
+| `'portrait-upside-down'` | 180° | Top |
+| `'landscape-right'` | 270° | Right |
+
+---
+
+## Frame
+
+<ResponseField name="isValid" type="boolean" required>
+  Whether the underlying native buffer is still valid. A frame becomes invalid once the frame processor (and any `runAsync` operations) finish executing. Always check this before accessing the frame inside async callbacks.
+</ResponseField>
+
+<ResponseField name="width" type="number" required>
+  The width of the frame, in pixels.
+</ResponseField>
+
+<ResponseField name="height" type="number" required>
+  The height of the frame, in pixels.
+</ResponseField>
+
+<ResponseField name="bytesPerRow" type="number" required>
+  The number of bytes in a single row of pixel data. This may be larger than `width × bytesPerPixel` due to row alignment padding.
+</ResponseField>
+
+<ResponseField name="planesCount" type="number" required>
+  The number of planes this frame contains. YUV frames typically have 2 planes (luma + chroma); RGB frames have 1.
+</ResponseField>
+
+<ResponseField name="isMirrored" type="boolean" required>
+  Whether the frame is horizontally mirrored. This is typically `true` for front-facing (selfie) cameras.
+</ResponseField>
+
+<ResponseField name="timestamp" type="number" required>
+  The timestamp of the frame relative to the host system clock, in nanoseconds.
+</ResponseField>
+
+<ResponseField name="orientation" type="Orientation" required>
+  The orientation of the frame relative to the desired output orientation.
+
+  For example, if the phone is held in `'portrait'` and the frame's orientation is `'landscape-left'`, the frame is 90° rotated. To display it upright you need to counter-rotate by 90°.
+
+  Prefer handling orientation via flags or transforms rather than actually rotating pixel data to avoid performance overhead. Many ML libraries (e.g. MLKit) accept the orientation directly in their `detect(...)` API.
+</ResponseField>
+
+<ResponseField name="pixelFormat" type="PixelFormat" required>
+  The pixel format of this frame: `'yuv'`, `'rgb'`, or `'unknown'`. Ensure your processing code matches this format.
+</ResponseField>
+
+---
+
+## Methods
+
+<ResponseField name="toArrayBuffer()" type="() => ArrayBuffer">
+  Copies the frame's pixel data from GPU memory to a CPU-accessible `ArrayBuffer`. The layout of the buffer matches the frame's `pixelFormat`.
+
+  <Warning>
+    This performs a GPU→CPU memory copy. Avoid calling it on every frame if performance is critical.
+  </Warning>
+
+  ```ts
+  const frameProcessor = useFrameProcessor((frame) => {
+    'worklet'
+
+    if (frame.pixelFormat === 'rgb') {
+      const buffer = frame.toArrayBuffer()
+      const data = new Uint8Array(buffer)
+      console.log(`Pixel at 0,0: RGB(${data[0]}, ${data[1]}, ${data[2]})`)
+    }
+  }, [])
+  ```
+</ResponseField>
+
+<ResponseField name="toString()" type="() => string">
+  Returns a human-readable description of the frame, useful for debugging.
+
+  ```ts
+  console.log(frame.toString()) // "3840 x 2160 Frame"
+  ```
+</ResponseField>
+
+<ResponseField name="getNativeBuffer()" type="() => NativeBuffer">
+  Returns a managed pointer to the underlying native platform buffer.
+
+  - **iOS**: points to a `CVPixelBufferRef`
+  - **Android**: points to an `AHardwareBuffer*`
+
+  You must call `nativeBuffer.delete()` when you are done with the buffer, otherwise the camera pipeline will stall. Keep the `Frame` alive at least as long as the `NativeBuffer`.
+
+  <Expandable title="NativeBuffer properties">
+    <ResponseField name="pointer" type="bigint" required>
+      A `uint64_t`/`uintptr_t` value pointing to the native platform buffer.
+    </ResponseField>
+    <ResponseField name="delete()" type="() => void">
+      Releases this reference to the platform buffer. Other references may still exist, so calling `delete()` does not guarantee the underlying buffer is freed — but failing to call it will stall the pipeline.
+    </ResponseField>
+  </Expandable>
+</ResponseField>

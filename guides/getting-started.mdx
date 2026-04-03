@@ -1,0 +1,208 @@
+---
+title: Getting started
+description: Install VisionCamera, configure platform permissions, and render your first camera view.
+sidebarTitle: Getting started
+keywords: [react-native, vision camera, install, permissions, camera, getting started]
+---
+
+## Requirements
+
+- **iOS** 12 or higher
+- **Android** SDK 21 (Android 5.0) or higher
+
+## Installation
+
+<Tabs>
+  <Tab title="React Native">
+    <CodeGroup>
+
+    ```bash npm
+    npm install react-native-vision-camera
+    cd ios && pod install
+    ```
+
+    ```bash yarn
+    yarn add react-native-vision-camera
+    cd ios && pod install
+    ```
+
+    </CodeGroup>
+  </Tab>
+  <Tab title="Expo">
+    ```bash
+    npx expo install react-native-vision-camera
+    ```
+  </Tab>
+</Tabs>
+
+## Configure permissions
+
+The camera and microphone require explicit permission entries in the native project manifests before you can request them from the user.
+
+<Tabs>
+  <Tab title="React Native">
+    <Steps>
+      <Step title="iOS — Info.plist">
+        Open your project's `ios/<AppName>/Info.plist` and add the following keys inside the outermost `<dict>` tag:
+
+        ```xml
+        <key>NSCameraUsageDescription</key>
+        <string>$(PRODUCT_NAME) needs access to your Camera.</string>
+
+        <!-- Required only if you record audio -->
+        <key>NSMicrophoneUsageDescription</key>
+        <string>$(PRODUCT_NAME) needs access to your Microphone.</string>
+        ```
+      </Step>
+      <Step title="Android — AndroidManifest.xml">
+        Open `android/app/src/main/AndroidManifest.xml` and add the following lines inside the `<manifest>` tag:
+
+        ```xml
+        <uses-permission android:name="android.permission.CAMERA" />
+
+        <!-- Required only if you record audio -->
+        <uses-permission android:name="android.permission.RECORD_AUDIO" />
+        ```
+      </Step>
+    </Steps>
+  </Tab>
+  <Tab title="Expo">
+    Add the VisionCamera config plugin to your `app.json`, `app.config.json`, or `app.config.js`:
+
+    ```json
+    {
+      "name": "my app",
+      "plugins": [
+        [
+          "react-native-vision-camera",
+          {
+            "cameraPermissionText": "$(PRODUCT_NAME) needs access to your Camera.",
+
+            "enableMicrophonePermission": true,
+            "microphonePermissionText": "$(PRODUCT_NAME) needs access to your Microphone."
+          }
+        ]
+      ]
+    }
+    ```
+
+    Then compile the config plugin to apply the permission entries:
+
+    ```bash
+    npx expo prebuild
+    ```
+
+    To build a new binary with the updated permissions, run:
+
+    ```bash
+    eas build
+    ```
+
+    <Note>
+      The `enableMicrophonePermission` option defaults to `false`. Only set it to `true` if your app records audio.
+    </Note>
+  </Tab>
+</Tabs>
+
+## Request permissions at runtime
+
+Declaring the permission in the manifest only allows your app to ask for it — you still need to prompt the user at runtime.
+
+<Tabs>
+  <Tab title="Hooks API">
+    Use the `useCameraPermission` hook. It returns the current `hasPermission` state and a `requestPermission` function:
+
+    ```tsx
+    import { useCameraPermission, useMicrophonePermission } from 'react-native-vision-camera'
+
+    function PermissionsScreen() {
+      const { hasPermission: hasCameraPermission, requestPermission: requestCamera } = useCameraPermission()
+      const { hasPermission: hasMicPermission, requestPermission: requestMic } = useMicrophonePermission()
+
+      useEffect(() => {
+        requestCamera()
+        requestMic()
+      }, [])
+
+      // ...
+    }
+    ```
+
+    The hook handles three possible states:
+
+    1. **First launch** — `hasPermission` is `false`. Call `requestPermission()` to show the system dialog.
+    2. **Already granted** — `hasPermission` is `true`. Proceed to mount the `<Camera>` view.
+    3. **Denied** — `hasPermission` is `false` and `requestPermission()` returns `false`. Direct the user to app settings using the [React Native `Linking` API](https://reactnative.dev/docs/linking#opensettings).
+  </Tab>
+  <Tab title="Imperative API">
+    Use the static methods on the `Camera` class directly:
+
+    ```ts
+    import { Camera } from 'react-native-vision-camera'
+
+    // Check the current status
+    const cameraPermission = Camera.getCameraPermissionStatus()
+    const microphonePermission = Camera.getMicrophonePermissionStatus()
+    // Returns: 'granted' | 'not-determined' | 'denied' | 'restricted'
+
+    // Request permission
+    const newCameraPermission = await Camera.requestCameraPermission()
+    const newMicrophonePermission = await Camera.requestMicrophonePermission()
+    // Returns: 'granted' | 'denied'
+    ```
+
+    Permission statuses:
+
+    - `granted` — Your app is authorized. Proceed to mount the `<Camera>` view.
+    - `not-determined` — The user has not been asked yet. Call the request function.
+    - `denied` — The user denied the request. The system dialog will not appear again. Use `Linking.openSettings()` to redirect the user.
+    - `restricted` — The camera or microphone is unavailable due to device restrictions such as parental controls.
+
+    <Note>
+      The request functions only show a system dialog when the status is `not-determined`. Calling them when the status is already `denied` returns `"denied"` immediately without prompting.
+    </Note>
+  </Tab>
+</Tabs>
+
+## Mount the Camera view
+
+Once you have camera permission, use the `useCameraDevice` hook to select a device and pass it to the `<Camera>` component:
+
+```tsx
+import { StyleSheet } from 'react-native'
+import { Camera, useCameraDevice, useCameraPermission } from 'react-native-vision-camera'
+
+function App() {
+  const { hasPermission } = useCameraPermission()
+  const device = useCameraDevice('back')
+
+  if (!hasPermission) return <PermissionsPage />
+  if (device == null) return <NoCameraDeviceError />
+
+  return (
+    <Camera
+      style={StyleSheet.absoluteFill}
+      device={device}
+      isActive={true}
+    />
+  )
+}
+```
+
+<Tip>
+  Use `StyleSheet.absoluteFill` to make the camera view fill its parent container. You can also use any standard React Native `ViewStyle` here.
+</Tip>
+
+## Next steps
+
+<Columns cols={2}>
+  <Card title="Camera devices" icon="mobile" href="/guides/devices">
+    Learn how to select physical and virtual (multi-lens) camera devices.
+  </Card>
+  <Card title="Camera formats" icon="film" href="/guides/formats">
+    Configure resolution, FPS, HDR, and stabilization for your use-case.
+  </Card>
+  <Card title="Camera lifecycle" icon="rotate" href="/guides/lifecycle">
+    Control when the camera streams and respond to session events.
+  </Card>
+</Columns>

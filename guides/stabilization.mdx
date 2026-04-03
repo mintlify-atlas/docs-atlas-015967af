@@ -1,0 +1,107 @@
+---
+title: Video stabilization
+description: Smooth out camera jitter and shaking using software- or hardware-based video stabilization modes.
+---
+
+## What is video stabilization?
+
+Video stabilization is an algorithm that corrects for jitters, shaking, and abrupt camera movements to produce a smoother video output. It works by analyzing motion over time and applying compensating transforms to the image.
+
+<Note>
+All stabilization modes crop the image to a smaller view area so there is room to shift the frame. Expect a slight "zoomed-in" effect when stabilization is active.
+</Note>
+
+### Software-based stabilization
+
+Software stabilization uses CPU or GPU algorithms to track camera movement across multiple past frames, comparing pixel changes to compute a correction transform.
+
+### Hardware-based stabilization
+
+Hardware stabilization works with the device's gyroscope sensor and (on some hardware) a physically moving lens element to cancel out abrupt movements in near real-time. This is faster and more accurate than software-based approaches.
+
+## Stabilization modes
+
+The `VideoStabilizationMode` type defines the available modes:
+
+| Mode | Description |
+|------|-------------|
+| `'off'` | No stabilization. |
+| `'standard'` | Software-based stabilization. Reduces field of view by about 10%. |
+| `'cinematic'` | More aggressive software stabilization with stronger cropping or transforms. |
+| `'cinematic-extended'` | Extended software- and hardware-based stabilization. Most aggressive cropping. Highest latency. |
+| `'auto'` | Lets the system choose the most appropriate mode for the device and format. |
+
+## Checking format support
+
+Not every format supports every stabilization mode. Before enabling a mode, check the format's `videoStabilizationModes` array:
+
+```ts
+const supportsExtended = format.videoStabilizationModes.includes('cinematic-extended')
+```
+
+## Selecting a format that supports your mode
+
+Use `useCameraFormat` (or `getCameraFormat`) to find a format that includes the mode you want:
+
+<CodeGroup>
+
+```ts hooks
+import { useCameraFormat } from 'react-native-vision-camera'
+
+const format = useCameraFormat(device, [
+  { videoStabilizationMode: 'cinematic-extended' },
+])
+```
+
+```ts imperative
+import { getCameraFormat } from 'react-native-vision-camera'
+
+const format = getCameraFormat(device, [
+  { videoStabilizationMode: 'cinematic-extended' },
+])
+```
+
+</CodeGroup>
+
+## Enabling video stabilization
+
+Pass the format to `<Camera>` and set `videoStabilizationMode` only when the format supports it:
+
+```tsx
+const format = useCameraFormat(device, [
+  { videoStabilizationMode: 'cinematic-extended' },
+])
+
+const supportsStabilization = format?.videoStabilizationModes.includes('cinematic-extended')
+const stabilizationMode = supportsStabilization ? 'cinematic-extended' : undefined
+
+return (
+  <Camera
+    device={device}
+    isActive={true}
+    format={format}
+    video={true}
+    videoStabilizationMode={stabilizationMode}
+  />
+)
+```
+
+Once enabled, the video pipeline stabilizes frames before they are written to the output file or delivered to a frame processor.
+
+## Latency
+
+Video stabilization introduces additional latency because frames must be buffered and processed before they are available. Latency increases with the aggressiveness of the mode:
+
+| Use case | Effect |
+|----------|--------|
+| **Video recording** | `stopRecording()` takes longer to finalize the file. |
+| **Frame processors** | Frames arrive later. With `cinematic-extended`, a frame may be up to ~3 seconds old by the time it arrives. |
+| **Skia frame processors** | Because Skia draws frames onto the preview before output, any stabilization latency delays the live preview as well. |
+
+<Warning>
+If you use a Skia frame processor, prefer fast software-based or no stabilization. `cinematic-extended` can cause a visible multi-second delay in the preview.
+</Warning>
+
+## Performance impact
+
+Enabling video stabilization increases Camera initialization time. If startup speed is a priority, disable `videoStabilizationMode` entirely. See the [performance guide](/guides/performance) for more optimization tips.

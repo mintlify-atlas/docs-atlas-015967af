@@ -1,0 +1,177 @@
+---
+title: 'CodeScanner'
+description: 'Types for barcode and QR code scanning with the VisionCamera code scanner.'
+---
+
+VisionCamera's built-in code scanner detects barcodes and QR codes directly from the camera stream without requiring a frame processor plugin. Configure it with the `useCodeScanner` hook and pass the result to the `<Camera>` component.
+
+```ts
+import { useCodeScanner } from 'react-native-vision-camera'
+
+const codeScanner = useCodeScanner({
+  codeTypes: ['qr', 'ean-13'],
+  onCodeScanned: (codes, frame) => {
+    for (const code of codes) {
+      console.log(`${code.type}: ${code.value}`)
+    }
+  },
+})
+```
+
+Then pass `codeScanner` to `<Camera codeScanner={codeScanner} />`.
+
+<Note>
+  For the full hook API, see the [`useCodeScanner`](/api/hooks/use-code-scanner) reference.
+</Note>
+
+---
+
+## CodeType
+
+The type of barcode or 2D code to scan for. Pass one or more values in `CodeScanner.codeTypes`.
+
+```ts
+type CodeType =
+  | 'code-128'
+  | 'code-39'
+  | 'code-93'
+  | 'codabar'
+  | 'gs1-data-bar'
+  | 'gs1-data-bar-limited'
+  | 'gs1-data-bar-expanded'
+  | 'ean-13'
+  | 'ean-8'
+  | 'itf'
+  | 'itf-14'
+  | 'upc-e'
+  | 'upc-a'
+  | 'qr'
+  | 'pdf-417'
+  | 'aztec'
+  | 'data-matrix'
+```
+
+| Value | Format |
+|---|---|
+| `'code-128'` | Code 128 linear barcode |
+| `'code-39'` | Code 39 linear barcode |
+| `'code-93'` | Code 93 linear barcode |
+| `'codabar'` | Codabar linear barcode |
+| `'gs1-data-bar'` | GS1 DataBar (RSS-14) |
+| `'gs1-data-bar-limited'` | GS1 DataBar Limited |
+| `'gs1-data-bar-expanded'` | GS1 DataBar Expanded |
+| `'ean-13'` | EAN-13 / ISBN-13 |
+| `'ean-8'` | EAN-8 |
+| `'itf'` | ITF (Interleaved 2 of 5) |
+| `'itf-14'` | ITF-14 shipping label |
+| `'upc-e'` | UPC-E compressed barcode |
+| `'upc-a'` | UPC-A standard barcode |
+| `'qr'` | QR Code 2D barcode |
+| `'pdf-417'` | PDF417 stacked barcode |
+| `'aztec'` | Aztec 2D barcode |
+| `'data-matrix'` | Data Matrix 2D barcode |
+
+---
+
+## CodeScannerFrame
+
+The full area used for code scanning. Code bounds and corner coordinates reported in `Code` are relative to this frame.
+
+<ResponseField name="width" type="number" required>
+  The width of the scanning area, in pixels. Typically 1280 or 1920.
+</ResponseField>
+
+<ResponseField name="height" type="number" required>
+  The height of the scanning area, in pixels. Typically 720 or 1080.
+</ResponseField>
+
+---
+
+## Code
+
+A single detected code returned inside the `onCodeScanned` callback.
+
+<ResponseField name="type" type="CodeType | 'unknown'" required>
+  The format of the detected code. Returns `'unknown'` if the format could not be determined.
+</ResponseField>
+
+<ResponseField name="value" type="string">
+  The decoded string content of the code. May be `undefined` if the code was detected but could not be decoded (e.g. damaged barcode).
+</ResponseField>
+
+<ResponseField name="frame" type="object">
+  The bounding rectangle of the detected code relative to the camera preview, in density-independent pixels (dp).
+
+  <Expandable title="frame properties">
+    <ResponseField name="x" type="number" required>
+      The x-coordinate of the left edge of the bounding box.
+    </ResponseField>
+    <ResponseField name="y" type="number" required>
+      The y-coordinate of the top edge of the bounding box.
+    </ResponseField>
+    <ResponseField name="width" type="number" required>
+      The width of the bounding box.
+    </ResponseField>
+    <ResponseField name="height" type="number" required>
+      The height of the bounding box.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="corners" type="Point[]">
+  The exact corner points of the detected code relative to the camera preview, in density-independent pixels (dp). Useful for drawing an accurate overlay on top of the code.
+
+  <Expandable title="Point properties">
+    <ResponseField name="x" type="number" required>
+      The x-coordinate of the corner point.
+    </ResponseField>
+    <ResponseField name="y" type="number" required>
+      The y-coordinate of the corner point.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+---
+
+## CodeScanner
+
+The configuration object created by `useCodeScanner` and passed to `<Camera codeScanner={...} />`.
+
+<ResponseField name="codeTypes" type="CodeType[]" required>
+  The list of code formats the scanner should detect. Limiting this list to only the formats you need can improve scanning performance.
+
+  ```ts
+  codeTypes: ['qr', 'ean-13', 'code-128']
+  ```
+</ResponseField>
+
+<ResponseField name="onCodeScanned" type="(codes: Code[], frame: CodeScannerFrame) => void" required>
+  Called whenever the set of detected codes changes. Receives an array of `Code` objects (empty if no codes are visible) and the `CodeScannerFrame` that describes the scanning area.
+
+  ```ts
+  onCodeScanned: (codes, frame) => {
+    console.log(`Scanned ${codes.length} codes in a ${frame.width}x${frame.height} frame`)
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="regionOfInterest" type="object">
+  Crops the scanner's active area to a specific rectangle, ignoring codes detected outside it. Coordinates are in the same space as `CodeScannerFrame`.
+
+  <Note>iOS only.</Note>
+
+  <Expandable title="regionOfInterest properties">
+    <ResponseField name="x" type="number" required>
+      The x-coordinate of the left edge of the region.
+    </ResponseField>
+    <ResponseField name="y" type="number" required>
+      The y-coordinate of the top edge of the region.
+    </ResponseField>
+    <ResponseField name="width" type="number" required>
+      The width of the region.
+    </ResponseField>
+    <ResponseField name="height" type="number" required>
+      The height of the region.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
